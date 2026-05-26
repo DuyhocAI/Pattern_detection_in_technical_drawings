@@ -150,31 +150,12 @@ class PatternDetectionPipeline:
                 # unreliable for binary line-art and rejects correctly-detected vertical
                 # components (R2/R4/R6/R8 score < 0.84 despite being real resistors).
                 if cands_s:
-                    # Strict chamfer pre-filter (≤3.0) — catches most components.
-                    # Borderline range (3.0–3.7): run DINOv2 to rescue high-confidence
-                    # real components whose drawing region has adjacent noise edges
-                    # pushing their Chamfer score just above 3.0 (dino≥0.86 required).
-                    _cands_with_ch = self.postprocessor.filter_chamfer_shape(
-                        cands_s, drawing_proc, pattern_proc, max_chamfer=3.7
+                    cands_s = self.postprocessor.filter_chamfer_shape(
+                        cands_s, drawing_proc, pattern_proc, max_chamfer=3.0
                     )
-                    cands_strict     = [c for c in _cands_with_ch if c.get("chamfer_dist", 0) <= 3.0]
-                    cands_borderline = [c for c in _cands_with_ch if c.get("chamfer_dist", 0) > 3.0]
-                    if cands_borderline:
-                        _bl_saved_thr = self.dino_verifier.cosine_threshold
-                        self.dino_verifier.cosine_threshold = 0.0
-                        bl_scored = self.dino_verifier.verify_candidates(
-                            drawing_proc, pattern_proc, cands_borderline, derotate=False
-                        )
-                        self.dino_verifier.cosine_threshold = _bl_saved_thr
-                        cands_borderline = [c for c in bl_scored if c.get("dino_score", 0) >= 0.88]
-                    else:
-                        cands_borderline = []
-                    for c in cands_strict:
+                    for c in cands_s:
                         c.setdefault("dino_score", 0.0)
                         c.setdefault("confidence", c.get("ncc_score", 0.5))
-                    for c in cands_borderline:
-                        c.setdefault("confidence", (c.get("ncc_score", 0.5) + c.get("dino_score", 0)) / 2)
-                    cands_s = cands_strict + cands_borderline
                 before_s = len(cands_s)
                 cands_s = self.postprocessor.filter_title_block(cands_s, drawing_proc)
                 print(f"[Pipeline] Simple micro pass: {ncc_s_count} NCC -> {before_s} chamfer -> {len(cands_s)} (zone filter)")
@@ -275,12 +256,7 @@ class PatternDetectionPipeline:
                 )
                 _circuit = self.postprocessor.filter_junction_dots(_circuit, drawing_proc)
                 _circuit = self.postprocessor.filter_rect_integrity(_circuit, drawing_proc)
-                # DINOv2-verified borderline candidates (dino ≥ 0.86) bypass the
-                # final Chamfer check — they've already been semantically confirmed.
-                _dino_ok   = [c for c in _circuit if c.get("dino_score", 0) >= 0.88]
-                _needs_ch  = [c for c in _circuit if c.get("dino_score", 0) < 0.86]
-                _needs_ch  = self.postprocessor.filter_chamfer_shape(_needs_ch, drawing_proc, pattern_proc)
-                _circuit   = _needs_ch + _dino_ok
+                _circuit = self.postprocessor.filter_chamfer_shape(_circuit, drawing_proc, pattern_proc)
                 _bottom_margin = max(30, int(_drw_h * 0.04))
                 _notes = [c for c in _notes
                           if c["y"] + c["h"] <= _drw_h - _bottom_margin]
