@@ -134,6 +134,14 @@ class NCCMatcher:
             for j in range(i + 1, len(candidates)):
                 if suppressed[j]:
                     continue
+                # Never suppress across orientation groups: a horizontal match
+                # (angle near 0°) should not eliminate a vertical match (angle
+                # near 90°) at the same location — they represent different
+                # shape hypotheses and the structural filters decide later.
+                a_vert = 70 <= abs(cand.get("angle", 0)) <= 110
+                b_vert = 70 <= abs(candidates[j].get("angle", 0)) <= 110
+                if a_vert != b_vert:
+                    continue
                 if self._iou(cand, candidates[j]) > self.nms_iou_threshold:
                     suppressed[j] = True
 
