@@ -913,6 +913,74 @@ class Postprocessor:
                 result.append(c)
         return result
 
+    def filter_output_bubble(
+        self,
+        candidates: List[dict],
+        drawing_gray: np.ndarray,
+        pattern_gray: np.ndarray,
+        min_blob_area: int = 8,
+        max_blob_area: int = 800,
+        min_blob_fill: float = 0.30,
+    ) -> List[dict]:
+        """Distinguish gates that differ only by an output bubble (e.g. XOR vs XNOR).
+
+        Probes the output side (right-center) of the template and each candidate.
+        If the template has NO bubble, candidates WITH a bubble are rejected.
+        If the template HAS a bubble, candidates WITHOUT a bubble are rejected.
+        Bidirectional: works for both XOR-as-query and XNOR-as-query cases.
+        """
+        ph, pw = pattern_gray.shape[:2]
+        t_has_bubble = self._probe_output_bubble(
+            pattern_gray, 0, 0, pw, ph, pw, ph,
+            min_blob_area, max_blob_area, min_blob_fill,
+        )
+        result = []
+        H, W = drawing_gray.shape[:2]
+        for c in candidates:
+            x, y, w, h = c["x"], c["y"], c["w"], c["h"]
+            c_has_bubble = self._probe_output_bubble(
+                drawing_gray, x, y, w, h, W, H,
+                min_blob_area, max_blob_area, min_blob_fill,
+            )
+            if t_has_bubble == c_has_bubble:
+                result.append(c)
+        return result
+
+    def _probe_output_bubble(
+        self,
+        img: np.ndarray,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+        W: int,
+        H: int,
+        min_blob_area: int = 8,
+        max_blob_area: int = 800,
+        min_blob_fill: float = 0.30,
+    ) -> bool:
+        """Return True if a compact filled blob exists at the right-center output side."""
+        px1 = x + int(w * 0.75)
+        px2 = min(W, x + w + int(w * 0.15))
+        py1 = y + int(h * 0.38)
+        py2 = y + int(h * 0.62)
+        if px2 <= px1 or py2 <= py1:
+            return False
+        probe = img[py1:py2, px1:px2]
+        inv = (probe < 128).astype(np.uint8) * 255
+        n_labels, _, stats, _ = cv2.connectedComponentsWithStats(inv)
+        for i in range(1, n_labels):
+            area = int(stats[i, cv2.CC_STAT_AREA])
+            bw = int(stats[i, cv2.CC_STAT_WIDTH])
+            bh = int(stats[i, cv2.CC_STAT_HEIGHT])
+            if bh > 0 and bw > 0:
+                ar = bw / bh
+                fill = area / (bw * bh)
+                if (min_blob_area <= area <= max_blob_area
+                        and 0.25 <= ar <= 4.0 and fill >= min_blob_fill):
+                    return True
+        return False
+
     @staticmethod
     def _overlap_ratio(a: dict, b: dict) -> float:
         """Max of IoU and containment ratio (intersection / area of smaller box).

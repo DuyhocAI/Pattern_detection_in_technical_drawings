@@ -164,11 +164,18 @@ class PatternDetectionPipeline:
                 # Complex templates: separate near-0° (3a) and near-90° (3b) micro passes.
                 # Standard passes 1+2 only sweep ±10° around 0°, so pass 3b is the only
                 # path for 90°-rotated components (e.g. bridge rectifiers mounted vertically).
-                # Scales cover [0.70–1.35] so rotated components at their natural drawing
-                # size are found (pass 2 relaxed scales stop at 0.85 minimum).
-                # Same relaxed NCC threshold as pass 2 — BR components score ~0.28–0.40
-                # even at their correct scale/rotation, so 0.45 misses them entirely.
-                _complex_scales = [0.70, 0.85, 1.0, 1.1, 1.2, 1.35]
+                #
+                # Small scales (0.30–0.60) are ONLY added when standard passes 1+2 found
+                # zero NCC candidates — this indicates the drawing instances are much
+                # smaller than the template (e.g. gate symbols at ~40% template size).
+                # When passes 1+2 already found candidates, standard scale range suffices
+                # (e.g. bridge rectifiers at 70–135% template size), and adding small
+                # scales would introduce false-positive small-feature matches.
+                _no_std_candidates = len(all_candidates) == 0
+                if _no_std_candidates:
+                    _complex_scales = [0.30, 0.35, 0.40, 0.45, 0.50, 0.60, 0.70, 0.85, 1.0, 1.1, 1.2, 1.35]
+                else:
+                    _complex_scales = [0.70, 0.85, 1.0, 1.1, 1.2, 1.35]
                 self.ncc_matcher.ncc_threshold = 0.28
 
                 # Sub-pass 3a: near-0° at smaller/wider scales than standard pass
@@ -191,7 +198,30 @@ class PatternDetectionPipeline:
                 ) if cands_3b else []
                 print(f"[Pipeline] Pass 3b (micro 90°): {len(cands_3b)} cands -> {len(verified_3b)} verified")
 
-                verified = verified + verified_3a + verified_3b
+                all_complex = verified + verified_3a + verified_3b
+
+                # Output-bubble filter: distinguishes gates that differ only by a
+                # small filled circle at the output terminal (e.g. XOR vs XNOR).
+                #
+                # Applied only when BOTH conditions hold:
+                # 1. Small scales were used (_no_std_candidates=True): the template is
+                #    a gate-like symbol much smaller than the drawing instances, meaning
+                #    the output-bubble probe is geometrically meaningful.
+                # 2. Template has gate-like AR (0.25–2.0): very elongated templates
+                #    (AR > 2.0, e.g. resistors) or very wide templates have no clear
+                #    directional "output" side, so the right-center probe is unreliable.
+                #
+                # This avoids false rejection for bridge rectifiers (AR ≈ 1.0 but
+                # passes 1+2 find standard-scale candidates) and resistors (AR > 2.0).
+                _is_gate_like = 0.25 <= _tmpl_ar <= 2.0
+                if _no_std_candidates and _is_gate_like:
+                    before_bubble = len(all_complex)
+                    all_complex = self.postprocessor.filter_output_bubble(
+                        all_complex, drawing_proc, pattern_proc
+                    )
+                    if len(all_complex) != before_bubble:
+                        print(f"[Pipeline] Bubble filter: {before_bubble} -> {len(all_complex)}")
+                verified = all_complex
 
             self.ncc_matcher.scales  = _saved_scales
             self.ncc_matcher.ncc_threshold = _saved_ncc
