@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BOM Pattern Detection</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <rect x="2" y="2" width="9" height="9" rx="2" fill="#2563EB"/>
+          <rect x="13" y="2" width="9" height="9" rx="2" fill="#2563EB" opacity="0.5"/>
+          <rect x="2" y="13" width="9" height="9" rx="2" fill="#2563EB" opacity="0.5"/>
+          <rect x="13" y="13" width="9" height="9" rx="2" fill="#2563EB"/>
+        </svg>
+      </div>
+      <span class="logo-text">BOM Detector</span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-page="detect">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <span>Detection</span>
+      </a>
+      <a href="#" class="nav-item" data-page="about">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <span>About</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-section">
+      <div class="section-label">Algorithm</div>
+      <div class="setting-row">
+        <label class="toggle-label">
+          <span>Auto-tune mode</span>
+          <div class="toggle" id="autoToggle">
+            <input type="checkbox" id="autoMode" checked />
+            <span class="toggle-slider"></span>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <div class="sidebar-section" id="manualSettings" style="display:none;">
+      <div class="section-label">Thresholds</div>
+
+      <div class="slider-group">
+        <div class="slider-row">
+          <span class="slider-label">NCC</span>
+          <span class="slider-val" id="nccVal">0.55</span>
+        </div>
+        <input type="range" class="slider" id="nccThreshold" min="0.1" max="0.9" step="0.01" value="0.55" />
+      </div>
+
+      <div class="slider-group">
+        <div class="slider-row">
+          <span class="slider-label">DINOv2 Cosine</span>
+          <span class="slider-val" id="dinoVal">0.84</span>
+        </div>
+        <input type="range" class="slider" id="dinoThreshold" min="0.5" max="0.99" step="0.01" value="0.84" />
+      </div>
+
+      <div class="slider-group">
+        <div class="slider-row">
+          <span class="slider-label">NMS IoU</span>
+          <span class="slider-val" id="nmsVal">0.40</span>
+        </div>
+        <input type="range" class="slider" id="nmsThreshold" min="0.1" max="0.9" step="0.01" value="0.40" />
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="tech-badges">
+        <span class="badge">NCC</span>
+        <span class="badge">DINOv2</span>
+        <span class="badge">Zero-shot</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1 class="page-title">Pattern Detection</h1>
+        <span class="page-subtitle">BOM Engineering Drawings · Zero-shot</span>
+      </div>
+      <div class="topbar-right">
+        <div class="status-dot" id="statusDot"></div>
+        <span class="status-text" id="statusText">Ready</span>
+      </div>
+    </header>
+
+    <!-- Upload section -->
+    <section class="upload-section">
+      <div class="upload-grid">
+        <!-- Pattern upload -->
+        <div class="upload-card" id="patternDropzone">
+          <div class="upload-inner">
+            <div class="upload-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="3" width="18" height="18" rx="3"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+            </div>
+            <div class="upload-label">Pattern Template</div>
+            <div class="upload-hint">Drop image or click to browse</div>
+            <input type="file" id="patternFile" accept="image/*" class="file-input" />
+          </div>
+          <div class="upload-preview" id="patternPreview" style="display:none;">
+            <img id="patternImg" alt="Pattern" />
+            <button class="clear-btn" id="clearPattern">×</button>
+          </div>
+        </div>
+
+        <!-- Drawing upload -->
+        <div class="upload-card" id="drawingDropzone">
+          <div class="upload-inner">
+            <div class="upload-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
+              </svg>
+            </div>
+            <div class="upload-label">Engineering Drawing</div>
+            <div class="upload-hint">Drop image or click to browse</div>
+            <input type="file" id="drawingFile" accept="image/*" class="file-input" />
+          </div>
+          <div class="upload-preview" id="drawingPreview" style="display:none;">
+            <img id="drawingImg" alt="Drawing" />
+            <button class="clear-btn" id="clearDrawing">×</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="run-row">
+        <button class="run-btn" id="runBtn" disabled>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          Run Detection
+        </button>
+      </div>
+    </section>
+
+    <!-- Stats row (hidden until result) -->
+    <section class="stats-row" id="statsRow" style="display:none;">
+      <div class="stat-card">
+        <div class="stat-value" id="statDetections">—</div>
+        <div class="stat-label">Detections</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="statAvgConf">—</div>
+        <div class="stat-label">Avg Confidence</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="statBestDino">—</div>
+        <div class="stat-label">Best DINOv2</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="statTime">—</div>
+        <div class="stat-label">Time (s)</div>
+      </div>
+    </section>
+
+    <!-- Results section (hidden until result) -->
+    <section class="results-section" id="resultsSection" style="display:none;">
+      <div class="results-grid">
+        <!-- Annotated output -->
+        <div class="result-card viz-card">
+          <div class="card-header">
+            <span class="card-title">Annotated Output</span>
+            <button class="download-btn" id="downloadBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Save
+            </button>
+          </div>
+          <div class="viz-container">
+            <img id="vizImage" alt="Detection result" />
+          </div>
+        </div>
+
+        <!-- Detection list -->
+        <div class="result-card detections-card">
+          <div class="card-header">
+            <span class="card-title">Detections</span>
+            <span class="card-count" id="detectionCount">0</span>
+          </div>
+          <div class="detections-list" id="detectionsList"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Loading overlay -->
+    <div class="loading-overlay" id="loadingOverlay" style="display:none;">
+      <div class="loading-card">
+        <div class="spinner"></div>
+        <div class="loading-title">Detecting Patterns</div>
+        <div class="loading-sub" id="loadingStage">Initializing pipeline…</div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

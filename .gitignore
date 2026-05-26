@@ -1,0 +1,73 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env
+
+# Model weights & large files
+*.pt
+*.pth
+*.bin
+*.onnx
+*.h5
+*.pkl
+checkpoints/
+weights/
+models/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Debug output
+debug_output/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Logs
+*.log
+logs/
+
+# HuggingFace cache
+.cache/
+
+# Development / debug scripts (not part of the submission)
+debug_*.py
+_debug*.py
+_test*.py
+check_*.py
+run_debug*.py
+run_web.py
+
+# Debug output images and crops in project root
+*.png
+!examples/*.png
+
+# Debug text output
+*_output.txt
+
+# Temp pipeline files
+*.tmp.*
+
+# Test suite cache
+.pytest_cache/
