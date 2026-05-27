@@ -161,146 +161,111 @@ class PatternDetectionPipeline:
                 print(f"[Pipeline] Simple micro pass: {ncc_s_count} NCC -> {before_s} chamfer -> {len(cands_s)} (zone filter)")
                 verified = verified + cands_s
             else:
-                # Complex templates: separate near-0° (3a) and near-90° (3b) micro passes.
-                # Standard passes 1+2 only sweep ±10° around 0°, so pass 3b is the only
-                # path for 90°-rotated components (e.g. bridge rectifiers mounted vertically).
-                #
-                # When passes 1+2 found zero NCC candidates, the template's natural matching
-                # scale lies outside [0.85-1.15].  A quick scale probe (13 scales across
-                # [0.25–2.5]) finds the best-NCC scale, then the micro passes sweep a ±40%
-                # window around it.  This avoids the previous approach of sweeping all scales
-                # from 0.30 to 1.35, which produced thousands of FPs at small scales for
-                # large-scale templates (e.g. zigzag resistors at scale ~1.5).
-                #
-                # When passes 1+2 already found candidates, the standard scale range suffices
-                # (bridge rectifiers at 70–135% template size).
+                # General complex template path: scale probe → adaptive search.
+                # No hardcoded shape classifiers; decisions are driven by probe results.
+                _ph, _pw = pattern_proc.shape[:2]
+                _drwH, _drwW = drawing_proc.shape[:2]
                 _no_std_candidates = len(all_candidates) == 0
-                _is_gate_like = 0.25 <= _tmpl_ar <= 2.5
-                # Filled-elongated: non-gate-like template whose interior is largely filled
-                # by strokes (e.g. ANSI zigzag resistor: AR~4.8, fill~0.33).
-                # Distinguishes "filled" patterns (zigzag, inductor coils) from "hollow"
-                # patterns (IEC rectangle: AR~5.3, fill~0.17) that look similar in AR but
-                # have a mostly-empty interior.  Only filled-elongated templates need the
-                # Chamfer + size filter and the skip-3a optimization.
-                _is_filled_elongated = not _is_gate_like and _interior_fill > 0.20
-                # Use adaptive scale probe when:
-                # - passes 1+2 found nothing (template at unusual scale), OR
-                # - template is filled-elongated (may have FPs at wrong scales from std passes)
-                _use_adaptive = _no_std_candidates or _is_filled_elongated
-                if _use_adaptive:
-                    # Quick scale probe: find natural matching scale
-                    _probe_scales = [0.25, 0.30, 0.35, 0.40, 0.50, 0.65, 0.85, 1.0, 1.2, 1.5, 1.8, 2.0, 2.5]
-                    _best_probe_s, _best_probe_ncc = 1.0, 0.0
-                    _ph, _pw = pattern_proc.shape[:2]
-                    _drwH, _drwW = drawing_proc.shape[:2]
-                    for _ps in _probe_scales:
-                        _ptw = int(_pw * _ps); _pth = int(_ph * _ps)
-                        if _ptw < 10 or _pth < 10 or _drwH < _pth or _drwW < _ptw:
-                            continue
-                        _pt_s = cv2.resize(pattern_proc, (_ptw, _pth), interpolation=cv2.INTER_AREA)
-                        _pres = cv2.matchTemplate(drawing_proc, _pt_s, cv2.TM_CCOEFF_NORMED)
-                        _, _pncc, _, _ = cv2.minMaxLoc(_pres)
-                        if _pncc > _best_probe_ncc:
-                            _best_probe_ncc = _pncc
-                            _best_probe_s = _ps
-                    print(f"[Pipeline] Scale probe: best={_best_probe_s:.2f} ncc={_best_probe_ncc:.3f}")
-                    # Adaptive scale range: ±40% around the best probe scale
-                    _fracs = [0.75, 0.85, 0.90, 0.95, 1.0, 1.05, 1.10, 1.15, 1.25, 1.40]
-                    _complex_scales = sorted(set(
+
+                # Scale probe: find the scale at which the template best matches the drawing.
+                _probe_scales = [0.25, 0.30, 0.35, 0.40, 0.50, 0.65, 0.85, 1.0, 1.2, 1.5, 1.8, 2.0, 2.5]
+                _best_probe_s, _best_probe_ncc = 1.0, 0.0
+                for _ps in _probe_scales:
+                    _ptw = int(_pw * _ps); _pth = int(_ph * _ps)
+                    if _ptw < 10 or _pth < 10 or _drwH < _pth or _drwW < _ptw:
+                        continue
+                    _pt_s = cv2.resize(pattern_proc, (_ptw, _pth), interpolation=cv2.INTER_AREA)
+                    _pres = cv2.matchTemplate(drawing_proc, _pt_s, cv2.TM_CCOEFF_NORMED)
+                    _, _pncc, _, _ = cv2.minMaxLoc(_pres)
+                    if _pncc > _best_probe_ncc:
+                        _best_probe_ncc = _pncc
+                        _best_probe_s = _ps
+                print(f"[Pipeline] Scale probe: best={_best_probe_s:.2f} ncc={_best_probe_ncc:.3f}")
+
+                # Decide whether to use probe-focused scales or standard complex scales.
+                #
+                # Probe-focused (±20% around probe) when:
+                # - No standard NCC candidates at all → template is at a very unusual scale
+                # - Probe found scale > 1.40 → template appears larger in drawing than legend
+                #   (e.g. zigzag resistors at 1.5×); standard scales [0.70–1.35] would miss them
+                #
+                # Standard complex scales when:
+                # - Probe scale ≤ 1.40 with standard candidates → probe may catch a false maximum
+                #   at small scales (e.g. scale 0.25 for a template whose real instances are at
+                #   0.85–1.15); standard sweep is more reliable in this regime
+                _use_probe_focused = _no_std_candidates or _best_probe_s > 1.40
+
+                if _use_probe_focused:
+                    _fracs = [0.80, 0.85, 0.90, 0.95, 1.0, 1.05, 1.10, 1.15, 1.20]
+                    _micro_scales = sorted(set(
                         round(_best_probe_s * f, 2)
                         for f in _fracs if 0.20 <= _best_probe_s * f <= 3.0
                     ))
+                    # Standard-pass candidates are at wrong scale; drop them.
+                    # (When no_std_candidates=True, verified is empty anyway.)
+                    verified_filtered = []
+                    if verified:
+                        print(f"[Pipeline] Std candidates dropped (probe scale {_best_probe_s:.2f} > standard range)")
+                    # Stricter DINOv2 for probe-focused micro passes to compensate for
+                    # the broader search area and reduce FPs from similarly-shaped components.
+                    _micro_dino = min(0.88, max(0.82, _best_probe_ncc * 1.04))
+                    # No 3b bump for probe-focused path: 90°-rotated candidates have naturally
+                    # lower DINOv2 scores; an extra +0.01 would cut real vertical detections.
+                    _micro_dino_3b = _micro_dino
+                    # Tight NMS for probe-focused path: each candidate bbox is already at
+                    # the right scale; union-expansion would create oversized merged boxes.
+                    _complex_use_union = False
                 else:
-                    _complex_scales = [0.70, 0.85, 1.0, 1.1, 1.2, 1.35]
-                    _best_probe_s = 1.0
+                    _micro_scales = [0.70, 0.85, 1.0, 1.1, 1.2, 1.35]
+                    # Standard-pass candidates are at the right scale — pass all through.
+                    # Filtering here reduces chain-suppression in the final NMS and causes
+                    # over-counting; the micro passes + NMS handle deduplication.
+                    verified_filtered = verified
+                    # Moderate DINOv2 for standard-range micro passes.
+                    _micro_dino = 0.82
+                    # Slight 3b bump: reduces FPs from 90°-rotated non-components that
+                    # happen to pass the 0.82 threshold (e.g. extra bridge rectifier FP).
+                    _micro_dino_3b = min(_micro_dino + 0.01, 0.88)
+                    # Union expand for standard path: helps collapse nearby multi-scale
+                    # duplicates via chain suppression.
+                    _complex_use_union = True
+
                 self.ncc_matcher.ncc_threshold = 0.28
 
-                # Sub-pass 3a: near-0° at smaller/wider scales than standard pass.
-                # Skip for non-gate-like templates when standard passes already found
-                # candidates: the default scale list [0.85-2.0] already covers 0°
-                # rotations at all relevant scales, and adding new intermediate scales
-                # only introduces extra FPs from non-resistor components.
-                # Skip pass 3a only for filled-elongated templates when standard passes
-                # already found candidates: the default scale list [0.85-2.0] covers 0°
-                # at all relevant scales, so new intermediate scales just add FPs.
-                # Hollow-elongated (IEC) and gate-like templates still run pass 3a.
-                _skip_3a = _is_filled_elongated and not _no_std_candidates
-                if not _skip_3a:
-                    self.ncc_matcher.scales = _complex_scales
-                    self.ncc_matcher.angles = [-10, -5, 0, 5, 10]
-                    self.dino_verifier.cosine_threshold = 0.82
-                    cands_3a = self.ncc_matcher.match(drawing_proc, pattern_proc)
-                    verified_3a = self.dino_verifier.verify_candidates(
-                        drawing_proc, pattern_proc, cands_3a, derotate=True
-                    ) if cands_3a else []
-                    print(f"[Pipeline] Pass 3a (micro 0°): {len(cands_3a)} cands -> {len(verified_3a)} verified")
-                else:
-                    verified_3a = []
-                    print("[Pipeline] Pass 3a skipped (filled-elongated + std candidates found)")
+                # Pass 3a: near-0°
+                self.ncc_matcher.scales = _micro_scales
+                self.ncc_matcher.angles = [-10, -5, 0, 5, 10]
+                self.dino_verifier.cosine_threshold = _micro_dino
+                cands_3a = self.ncc_matcher.match(drawing_proc, pattern_proc)
+                verified_3a = self.dino_verifier.verify_candidates(
+                    drawing_proc, pattern_proc, cands_3a, derotate=True
+                ) if cands_3a else []
+                print(f"[Pipeline] Pass 3a (micro 0°): {len(cands_3a)} cands -> {len(verified_3a)} verified")
 
-                # Sub-pass 3b: near-90° — same scale range, slightly stricter DINOv2
-                self.ncc_matcher.scales = _complex_scales
+                # Pass 3b: near-90°
+                self.ncc_matcher.scales = _micro_scales
                 self.ncc_matcher.angles = [80, 85, 90, 95, 100]
-                self.dino_verifier.cosine_threshold = 0.83
+                self.dino_verifier.cosine_threshold = _micro_dino_3b
                 cands_3b = self.ncc_matcher.match(drawing_proc, pattern_proc)
                 verified_3b = self.dino_verifier.verify_candidates(
                     drawing_proc, pattern_proc, cands_3b, derotate=True
                 ) if cands_3b else []
                 print(f"[Pipeline] Pass 3b (micro 90°): {len(cands_3b)} cands -> {len(verified_3b)} verified")
 
-                all_complex = verified + verified_3a + verified_3b
+                all_complex = verified_filtered + verified_3a + verified_3b
 
-                # Post-filters for complex micro-pass results
-                if _is_gate_like:
-                    # Gate-like templates (AR 0.25-2.5): output-bubble discrimination.
-                    # Only applied when the adaptive scale path was used (template at
-                    # unusual scale, e.g. XOR gates much smaller than legend copy).
-                    # Bridge rectifiers use standard scales and skip this filter.
-                    if _no_std_candidates:
-                        before_bubble = len(all_complex)
-                        all_complex = self.postprocessor.filter_output_bubble(
-                            all_complex, drawing_proc, pattern_proc
-                        )
-                        if len(all_complex) != before_bubble:
-                            print(f"[Pipeline] Bubble filter: {before_bubble} -> {len(all_complex)}")
-                elif _is_filled_elongated:
-                    # Filled-elongated templates (high interior fill, AR > 2.5): Chamfer + AR.
-                    # Standard passes produce many FP candidates for these shapes
-                    # (e.g. inductors matching zigzag NCC at 0.28); Chamfer distance
-                    # discriminates by edge structure (angular zigzag vs curved coils).
-                    # Hollow-elongated templates (IEC rectangles, low fill) skip this
-                    # block and rely on DINOv2 alone.
-                    before_cf = len(all_complex)
-                    all_complex = self.postprocessor.filter_chamfer_shape(
-                        all_complex, drawing_proc, pattern_proc, max_chamfer=3.0
+                # Output-bubble filter: only for gate-like templates at unusual scales.
+                # XOR/XNOR output bubbles match the gate body; filter them out.
+                # Standard-scale templates (including bridge rectifiers) skip this.
+                _is_gate_like = 0.25 <= _tmpl_ar <= 2.5
+                if _is_gate_like and _no_std_candidates:
+                    before_bubble = len(all_complex)
+                    all_complex = self.postprocessor.filter_output_bubble(
+                        all_complex, drawing_proc, pattern_proc
                     )
-                    print(f"[Pipeline] Chamfer filter: {before_cf} -> {len(all_complex)}")
-                    # AR filter: keep horizontal and vertical (90°-rotated) orientations
-                    _full_pat_ar = pattern_proc.shape[1] / max(1, pattern_proc.shape[0])
-                    _ar_inv = 1.0 / max(0.01, _full_pat_ar)
-                    ar_tol = 0.60
-                    before_ar = len(all_complex)
-                    all_complex = [
-                        c for c in all_complex
-                        if (_full_pat_ar * (1 - ar_tol) <= c["w"] / max(1, c["h"]) <= _full_pat_ar * (1 + ar_tol))
-                        or (_ar_inv * (1 - ar_tol) <= c["w"] / max(1, c["h"]) <= _ar_inv * (1 + ar_tol))
-                    ]
-                    if len(all_complex) != before_ar:
-                        print(f"[Pipeline] AR filter: {before_ar} -> {len(all_complex)}")
-                    # Size filter: reject candidates at wrong scale.
-                    # When scale probe found the natural matching scale, reject candidates
-                    # whose longest side is < 65% of the expected long side at probe scale.
-                    # This removes matches found at too-small NCC scales (e.g. scale 0.85
-                    # when the true scale is 1.50), which pass NCC+DINOv2 but are FPs.
-                    if _best_probe_s > 1.0:
-                        _min_long = int(max(_pw, _ph) * _best_probe_s * 0.75)
-                        before_sz = len(all_complex)
-                        all_complex = [
-                            c for c in all_complex
-                            if max(c["w"], c["h"]) >= _min_long
-                        ]
-                        if len(all_complex) != before_sz:
-                            print(f"[Pipeline] Size filter: {before_sz} -> {len(all_complex)} (min_long={_min_long})")
+                    if len(all_complex) != before_bubble:
+                        print(f"[Pipeline] Bubble filter: {before_bubble} -> {len(all_complex)}")
+
                 verified = all_complex
 
             self.ncc_matcher.scales  = _saved_scales
@@ -388,17 +353,18 @@ class PatternDetectionPipeline:
                 print(f"[Pipeline] Title-block filter: {before_tb} -> {len(verified)}")
 
             # Final NMS + format
-            # Simple templates: use tight IoU (0.25) to merge offset-position duplicates
-            # of the same component, and keep the best-fit bbox (not union) to avoid
-            # over-expanding the box when a lower-confidence offset duplicate gets merged in.
-            # Complex templates: use default IoU (0.40) with union bbox expansion.
+            # Simple templates: tight IoU (0.25), no union expand (keep best-fit bbox).
+            # Complex templates:
+            #   - probe-focused path (_complex_use_union=False): tight bboxes, no expand
+            #   - standard path (_complex_use_union=True): union expand for chain suppression
             if _is_simple:
                 verified = self.postprocessor.final_nms(
                     verified, iou_threshold=0.25, use_union_bbox=False
                 )
             else:
                 verified = self.postprocessor.final_nms(
-                    verified, iou_threshold=self.final_nms_iou
+                    verified, iou_threshold=self.final_nms_iou,
+                    use_union_bbox=_complex_use_union
                 )
             result = self.postprocessor.format_output(verified, drawing_proc.shape)
             t4 = time.time()
