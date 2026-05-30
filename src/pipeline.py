@@ -668,12 +668,27 @@ class PatternDetectionPipeline:
             # share low-level structure with the target and pass DINOv2.
             if self.use_vlm and verified:
                 before_vlm = len(verified)
-                vlm = self._get_vlm()
-                verified = vlm.filter_by_template_class(
-                    drawing_proc, pattern_proc, verified,
-                    keep_min_conf=self.vlm_keep_min_conf, verbose=True
-                )
-                print(f"[Pipeline] VLM Stage-3 filter: {before_vlm} -> {len(verified)}")
+                try:
+                    vlm = self._get_vlm()
+                    verified = vlm.filter_by_template_class(
+                        drawing_proc, pattern_proc, verified,
+                        keep_min_conf=self.vlm_keep_min_conf, verbose=True
+                    )
+                    print(f"[Pipeline] VLM Stage-3 filter: {before_vlm} -> {len(verified)}")
+                except Exception as vlm_err:
+                    # The VLM is an optional precision booster. If it fails (most
+                    # commonly CUDA OOM on a 12 GB card already holding DINOv2 +
+                    # candidate tensors), degrade gracefully: keep the NCC+DINOv2
+                    # results rather than failing the whole request.
+                    is_oom = "out of memory" in str(vlm_err).lower()
+                    print(f"[Pipeline] VLM Stage-3 SKIPPED ({'OOM' if is_oom else type(vlm_err).__name__}): "
+                          f"{vlm_err}")
+                    self._vlm = None  # drop the half-loaded model
+                    try:
+                        import torch
+                        torch.cuda.empty_cache()
+                    except Exception:
+                        pass
 
             # Final NMS + format
             # Simple templates: tight IoU (0.25), no union expand (keep best-fit bbox).

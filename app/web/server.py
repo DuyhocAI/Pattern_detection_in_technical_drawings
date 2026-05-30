@@ -5,6 +5,7 @@ import base64
 import time
 import sys
 import os
+import traceback
 
 # Fix OpenMP conflict on Windows/Anaconda
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
@@ -137,7 +138,8 @@ async def detect(
         })
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
 def _detections_to_csv(detections: list) -> str:
@@ -195,7 +197,8 @@ async def detect_csv(
             headers={"Content-Disposition": "attachment; filename=detections.csv"},
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
 @app.get("/api/health")

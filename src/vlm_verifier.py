@@ -87,12 +87,20 @@ class VLMVerifier:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = device
 
+        # Free any cached allocations from earlier stages (DINOv2, NCC tensors)
+        # before pulling the ~4.5 GB VLM onto the GPU. On a 12 GB card shared with
+        # the OS display this reclaimed headroom is the difference between fitting
+        # and an OOM.
+        if device == "cuda":
+            torch.cuda.empty_cache()
+
         dtype = torch.bfloat16 if device == "cuda" else torch.float32
         print(f"[VLMVerifier] Loading {self.model_name} on {device} ({dtype})...")
         self._model = Qwen2VLForConditionalGeneration.from_pretrained(
             self.model_name,
             torch_dtype=dtype,
             device_map=device,
+            low_cpu_mem_usage=True,
         )
         self._model.eval()
         # min_pixels/max_pixels keep token counts bounded for small crops
@@ -232,6 +240,11 @@ class VLMVerifier:
         out = self._processor.batch_decode(
             trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
         )[0]
+        # Release the per-crop activation/KV-cache spike so memory does not creep
+        # up across a long candidate list on a tight (12 GB) card.
+        del inputs, gen, trimmed
+        if self.device == "cuda":
+            self._torch.cuda.empty_cache()
         return out.strip().lower()
 
     def _ask_one(self, template_rgb: np.ndarray, crop_rgb: np.ndarray):
