@@ -76,6 +76,62 @@ class DINOVerifier:
 
         return feat
 
+    def embed_crops_normalized(
+        self, crops: List[np.ndarray], batch_size: int = 32
+    ) -> np.ndarray:
+        """Like embed_crops_batch but normalises each crop to landscape orientation.
+
+        Horizontal and vertical instances of the same symbol produce similar
+        DINOv2 embeddings after normalisation, making prototype comparison
+        orientation-invariant.
+        """
+        normalised = []
+        for c in crops:
+            img = c if c.ndim == 3 else c
+            h, w = img.shape[:2]
+            if h > w:
+                img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            normalised.append(img)
+        return self.embed_crops_batch(normalised, batch_size=batch_size)
+
+    def embed_crops_batch(
+        self, crops: List[np.ndarray], batch_size: int = 32
+    ) -> np.ndarray:
+        """Encode a list of image crops and return unit-normalised embeddings.
+
+        Args:
+            crops: List of grayscale or RGB numpy arrays (any size).
+            batch_size: Number of crops per GPU forward pass.
+
+        Returns:
+            (N, D) float32 array of L2-normalised feature vectors.
+        """
+        from PIL import Image as PILImage
+
+        if not crops:
+            return np.empty((0,), dtype=np.float32)
+
+        tensors = []
+        for crop in crops:
+            if crop.ndim == 2:
+                rgb = np.stack([crop, crop, crop], axis=-1)
+            else:
+                rgb = crop
+            pil = PILImage.fromarray(rgb.astype(np.uint8))
+            tensors.append(self.transform(pil))
+
+        all_feats = []
+        for start in range(0, len(tensors), batch_size):
+            batch = torch.stack(tensors[start:start + batch_size]).to(self.device)
+            with torch.no_grad():
+                feats = self.model.forward_features(batch)
+                patch_tokens = feats["x_norm_patchtokens"]   # (B, N, D)
+                pooled = patch_tokens.mean(dim=1)            # (B, D)
+                pooled = torch.nn.functional.normalize(pooled, dim=1)
+            all_feats.append(pooled.cpu().numpy())
+
+        return np.concatenate(all_feats, axis=0)   # (N, D)
+
     def encode_template(self, template: np.ndarray) -> torch.Tensor:
         """Encode template and cache the result.
 

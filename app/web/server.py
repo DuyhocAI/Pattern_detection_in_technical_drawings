@@ -1,5 +1,6 @@
 """FastAPI backend for BOM Pattern Detection web UI."""
 import io
+import csv
 import base64
 import time
 import sys
@@ -15,7 +16,7 @@ import numpy as np
 from PIL import Image
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
@@ -130,6 +131,62 @@ async def detect(
             "drawing_preview": drawing_b64,
         })
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _detections_to_csv(detections: list) -> str:
+    """Convert detection list to CSV string."""
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["id", "x", "y", "width", "height", "confidence", "ncc_score", "dino_score", "scale", "angle"])
+    for i, d in enumerate(detections, 1):
+        b = d["bbox"]
+        writer.writerow([
+            i,
+            b["x"], b["y"], b["w"], b["h"],
+            round(d.get("confidence", 0), 4),
+            round(d.get("ncc_score", 0), 4),
+            round(d.get("dino_score", 0), 4),
+            round(d.get("scale", 1.0), 4),
+            round(d.get("angle", 0), 1),
+        ])
+    return buf.getvalue()
+
+
+@app.post("/api/detect/csv")
+async def detect_csv(
+    pattern: UploadFile = File(...),
+    drawing: UploadFile = File(...),
+    mode: str = Form("auto"),
+    ncc_threshold: float = Form(0.55),
+    cosine_threshold: float = Form(0.84),
+    final_nms_iou: float = Form(0.4),
+):
+    """Run detection and return results as a downloadable CSV file."""
+    try:
+        pattern_bytes = await pattern.read()
+        drawing_bytes = await drawing.read()
+        pattern_np = upload_to_numpy(pattern_bytes)
+        drawing_np = upload_to_numpy(drawing_bytes)
+
+        pipeline = get_pipeline()
+        pipeline.update_thresholds(
+            ncc_threshold=ncc_threshold,
+            cosine_threshold=cosine_threshold,
+            final_nms_iou=final_nms_iou,
+        )
+        if mode == "auto":
+            result = pipeline.detect_auto(pattern_np, drawing_np, return_visualization=False)
+        else:
+            result = pipeline.detect(pattern_np, drawing_np, return_visualization=False)
+
+        csv_str = _detections_to_csv(result["detections"])
+        return StreamingResponse(
+            io.BytesIO(csv_str.encode("utf-8")),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=detections.csv"},
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

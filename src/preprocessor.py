@@ -126,12 +126,80 @@ class Preprocessor:
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
         return cv2.erode(img, kernel)
 
+    def clahe_enhance(
+        self, img: np.ndarray, clip_limit: float = 2.0, tile_size: int = 8
+    ) -> np.ndarray:
+        """Apply CLAHE (Contrast Limited Adaptive Histogram Equalization).
+
+        Improves local contrast in drawings with uneven line density — faint
+        strokes that are washed out globally become visible after CLAHE.
+        Applied to grayscale images BEFORE binarization.
+
+        Args:
+            img: Grayscale uint8 image.
+            clip_limit: Threshold for contrast limiting (higher = stronger).
+            tile_size: Grid size in pixels for local histogram computation.
+
+        Returns:
+            Contrast-enhanced grayscale image.
+        """
+        clahe = cv2.createCLAHE(
+            clipLimit=clip_limit, tileGridSize=(tile_size, tile_size)
+        )
+        return clahe.apply(img.astype(np.uint8))
+
+    def normalize_strokes(
+        self, img: np.ndarray, target_width: int = 2
+    ) -> np.ndarray:
+        """Normalize stroke width via thinning + uniform dilation.
+
+        Engineering drawings may scan at different DPIs, producing thick or
+        thin lines. This normalizes all strokes to `target_width` pixels:
+          1. Morphological thinning (iterative erosion to approximate skeleton)
+          2. Dilation to the desired target width
+
+        This makes NCC matching invariant to line-width variation between the
+        template and the drawing, which is a common source of false negatives.
+
+        Args:
+            img: Binary image (white background, black strokes).
+            target_width: Desired uniform stroke width in pixels.
+
+        Returns:
+            Binary image with normalized stroke width.
+        """
+        inv = cv2.bitwise_not(img)
+
+        # Iterative thinning: erode until no more pixels can be removed.
+        # Stop after 20 iterations to bound runtime.
+        kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
+        prev = np.zeros_like(inv)
+        for _ in range(20):
+            eroded = cv2.erode(inv, kernel)
+            temp = cv2.dilate(eroded, kernel)
+            diff = cv2.subtract(inv, temp)
+            skeleton = cv2.bitwise_or(prev, diff)
+            inv = eroded.copy()
+            prev = skeleton.copy()
+            if cv2.countNonZero(inv) == 0:
+                break
+
+        # Re-dilate skeleton to target width
+        if target_width > 1:
+            kw = target_width * 2 - 1
+            dk = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kw, kw))
+            skeleton = cv2.dilate(skeleton, dk)
+
+        return cv2.bitwise_not(skeleton)
+
     def preprocess(
         self,
         img_or_path: Union[str, np.ndarray],
         binarize_method: str = "adaptive",
         denoise: bool = True,
         dilate_strokes: int = 0,
+        clahe: bool = False,
+        normalize_stroke_width: int = 0,
     ) -> dict:
         """Full preprocessing pipeline.
 
@@ -161,11 +229,16 @@ class Preprocessor:
         h_res, w_res = resized.shape[:2]
         scale_factor = h_res / h_orig if h_orig > 0 else 1.0
 
-        processed = self.binarize(resized, method=binarize_method)
+        # CLAHE before binarization: improves faint-stroke visibility
+        to_binarize = self.clahe_enhance(resized) if clahe else resized
+
+        processed = self.binarize(to_binarize, method=binarize_method)
         if denoise:
             processed = self.denoise(processed)
         if dilate_strokes > 0:
             processed = self.dilate_strokes(processed, kernel_size=dilate_strokes)
+        if normalize_stroke_width > 0:
+            processed = self.normalize_strokes(processed, target_width=normalize_stroke_width)
 
         return {
             "original": original,

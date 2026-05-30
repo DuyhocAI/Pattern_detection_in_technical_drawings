@@ -283,8 +283,8 @@ class Postprocessor:
 
         img_h, img_w = output.shape[:2]
         # Scale thickness and font to image size
-        thickness = max(2, int(max(img_h, img_w) / 600))
-        font_scale = max(0.4, min(0.75, max(img_h, img_w) / 2000))
+        thickness = max(1, int(max(img_h, img_w) / 800))
+        font_scale = max(0.3, min(0.55, max(img_h, img_w) / 2500))
 
         def _conf_color(conf: float) -> Tuple:
             if conf >= 0.70:
@@ -294,29 +294,41 @@ class Postprocessor:
             else:
                 return (40, 40, 220)    # red
 
-        for idx, det in enumerate(detections):
+        # Sort by (y, x) so index numbers increase top-to-bottom, left-to-right
+        indexed = sorted(enumerate(detections), key=lambda p: (p[1]["bbox"]["y"], p[1]["bbox"]["x"]))
+
+        for orig_idx, det in indexed:
             bbox = det["bbox"]
             x, y, w, h = bbox["x"], bbox["y"], bbox["w"], bbox["h"]
             conf = float(det.get("confidence", 0))
             color = _conf_color(conf)
 
+            # Draw bounding box
             cv2.rectangle(output, (x, y), (x + w, y + h), color, thickness=thickness)
 
-            label = f"#{idx + 1}  {conf:.2f}"
+            # Label always drawn INSIDE the box at top-left corner.
+            # This guarantees labels never cover boxes from other detections —
+            # even when boxes overlap, each label stays within its own bbox.
+            label = f"#{orig_idx + 1} {conf:.2f}"
             (lw, lh), bl = cv2.getTextSize(
                 label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, 1
             )
-            tag_y = max(y - 4, lh + 6)
-            # Filled label background
-            cv2.rectangle(
-                output,
-                (x, tag_y - lh - 4),
-                (x + lw + 8, tag_y + bl),
-                color, -1,
-            )
+            pad = 2
+            # Clamp label to box interior
+            lx = min(x + pad, x + w - lw - pad)
+            ly = y + lh + pad
+            # Semi-transparent background: draw a filled rect then text
+            bg_x1 = max(x, lx - pad)
+            bg_y1 = max(y, ly - lh - pad)
+            bg_x2 = min(x + w, lx + lw + pad)
+            bg_y2 = min(y + h, ly + pad)
+            if bg_x2 > bg_x1 and bg_y2 > bg_y1:
+                overlay = output.copy()
+                cv2.rectangle(overlay, (bg_x1, bg_y1), (bg_x2, bg_y2), color, -1)
+                cv2.addWeighted(overlay, 0.75, output, 0.25, 0, output)
             cv2.putText(
                 output, label,
-                (x + 4, tag_y),
+                (lx, ly),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 font_scale, (255, 255, 255), 1, cv2.LINE_AA,
             )
@@ -864,6 +876,127 @@ class Postprocessor:
 
         return result
 
+    def filter_confidence_gap(
+        self,
+        candidates: List[dict],
+        min_gap: float = 0.075,
+        min_cluster_size: int = 2,
+    ) -> List[dict]:
+        """Remove low-confidence cluster when a bimodal confidence distribution is detected.
+
+        Real pattern instances (TPs) cluster at high confidence (0.75–0.90) because
+        both NCC and DINOv2 scores are high. Structurally-similar FPs (inductors,
+        transistors, op-amps) cluster at low confidence (0.58–0.67) — they barely
+        pass DINOv2 but have low NCC. A clear gap separates the two clusters.
+
+        When all candidates are real TPs (unimodal distribution, no gap ≥ min_gap),
+        all candidates are returned unchanged. This makes the filter adaptive and
+        harmless for drawings where the pipeline is already accurate.
+
+        Args:
+            min_gap: Minimum confidence difference between adjacent sorted scores to
+                     treat as a cluster boundary. 0.08 separates the 0.75/0.67 gap
+                     seen in complex drawings while ignoring the ~0.02–0.04 natural
+                     spread within a cluster of real TPs.
+            min_cluster_size: Minimum number of candidates required in EACH cluster
+                              for the gap to be considered meaningful.
+        """
+        if len(candidates) < min_cluster_size * 2 + 1:
+            return candidates
+
+        confs = sorted([c.get("confidence", 0.0) for c in candidates], reverse=True)
+
+        best_gap = 0.0
+        best_threshold = None
+        for i in range(len(confs) - 1):
+            gap = confs[i] - confs[i + 1]
+            above = i + 1
+            below = len(confs) - above
+            if gap > best_gap and above >= min_cluster_size and below >= min_cluster_size:
+                best_gap = gap
+                best_threshold = (confs[i] + confs[i + 1]) / 2.0
+
+        if best_gap >= min_gap and best_threshold is not None:
+            return [c for c in candidates if c.get("confidence", 0.0) >= best_threshold]
+        return candidates
+
+    def filter_profile_similarity(
+        self,
+        candidates: List[dict],
+        drawing_proc: np.ndarray,
+        pattern_proc: np.ndarray,
+        min_sim: float = 0.35,
+    ) -> List[dict]:
+        """Keep candidates whose 1D edge projection correlates with the template's.
+
+        For any template, the column-sum of its Canny edge map forms a characteristic
+        1D profile (e.g. evenly-spaced peaks for a zigzag, smooth humps for
+        inductors, asymmetric for transistors/op-amps). Candidates whose region
+        profile does not correlate are structural FPs.
+
+        Uses the **tight content bounding box** of the template (strips surrounding
+        whitespace) so the profile represents only the symbol, not padding.
+        Rotation-invariant: 90°-rotated candidates are un-rotated before comparison.
+        """
+        # Extract tight content bounding box from template to strip whitespace padding.
+        # Without this, a large template with a small symbol produces a profile that
+        # is dominated by empty columns and won't correlate with drawing crops.
+        _dark = pattern_proc < 128
+        _rows_any = np.any(_dark, axis=1)
+        _cols_any = np.any(_dark, axis=0)
+        if _rows_any.any() and _cols_any.any():
+            _rmin, _rmax = int(np.where(_rows_any)[0][0]), int(np.where(_rows_any)[0][-1])
+            _cmin, _cmax = int(np.where(_cols_any)[0][0]), int(np.where(_cols_any)[0][-1])
+            _tmpl = pattern_proc[_rmin:_rmax + 1, _cmin:_cmax + 1]
+        else:
+            _tmpl = pattern_proc
+
+        th, tw = _tmpl.shape[:2]
+        if tw < 4 or th < 4:
+            return candidates  # template too small for meaningful profile
+
+        tmpl_edges = cv2.Canny(_tmpl.astype(np.uint8), 50, 150).astype(float)
+        tmpl_h = np.sum(tmpl_edges, axis=0)   # horizontal projection (column sums)
+        tmpl_v = np.sum(tmpl_edges, axis=1)   # vertical projection (row sums)
+
+        def _safe_corr(a: np.ndarray, b: np.ndarray) -> float:
+            sa, sb = float(np.std(a)), float(np.std(b))
+            if sa < 1e-6 or sb < 1e-6:
+                return 0.0
+            return float(np.clip(np.corrcoef(a, b)[0, 1], -1.0, 1.0))
+
+        drwH, drwW = drawing_proc.shape[:2]
+        result = []
+        for c in candidates:
+            x, y, w, h = c["x"], c["y"], c["w"], c["h"]
+            region = drawing_proc[max(0, y):min(drwH, y + h), max(0, x):min(drwW, x + w)]
+            if region.shape[0] < 4 or region.shape[1] < 4:
+                result.append(c)
+                continue
+
+            # Rotate tall (90°-rotated) regions to horizontal for comparison
+            angle = c.get("angle", 0)
+            if 70 <= abs(angle) <= 110 and region.shape[0] > region.shape[1]:
+                region = cv2.rotate(region, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
+            reg_rs = cv2.resize(region.astype(np.uint8), (tw, th), interpolation=cv2.INTER_AREA)
+            reg_edges = cv2.Canny(reg_rs, 50, 150).astype(float)
+            reg_h = np.sum(reg_edges, axis=0)
+            reg_v = np.sum(reg_edges, axis=1)
+
+            # Use the better of horizontal and vertical correlation (handles partial
+            # rotation inaccuracy where the angle metadata may be off by a few degrees)
+            sim_h = _safe_corr(tmpl_h, reg_h)
+            sim_v = _safe_corr(tmpl_v, reg_v)
+            sim = max(sim_h, sim_v)
+
+            c_out = dict(c)
+            c_out["profile_sim"] = round(float(sim), 3)
+            if sim >= min_sim:
+                result.append(c_out)
+
+        return result
+
     def filter_neighborhood_complexity(
         self,
         candidates: List[dict],
@@ -1042,3 +1175,115 @@ class Postprocessor:
         if union_area <= 0:
             return 0.0
         return inter_area / union_area
+
+    # ------------------------------------------------------------------
+    # HOG-based self-supervised prototype filter
+    # ------------------------------------------------------------------
+
+    def _hog_feature(
+        self,
+        drawing: np.ndarray,
+        c: dict,
+        target_w: int = 64,
+        target_h: int = 32,
+        n_bins: int = 9,
+    ) -> np.ndarray:
+        """Compute a gradient-orientation histogram for a candidate region.
+
+        The region is always normalised to landscape orientation (width > height)
+        before feature extraction so horizontal and vertical resistors produce
+        the same feature vector.
+
+        Returns a unit-normalised float32 array of length `n_bins`.
+        """
+        H, W = drawing.shape[:2]
+        x, y, w, h = c["x"], c["y"], c["w"], c["h"]
+        region = drawing[max(0, y):min(H, y + h), max(0, x):min(W, x + w)]
+        if region.size == 0:
+            return np.zeros(n_bins, dtype=np.float32)
+
+        # Normalise to horizontal orientation
+        if region.shape[0] > region.shape[1]:
+            region = cv2.rotate(region, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
+        region_u8 = region.astype(np.uint8)
+        region_rs = cv2.resize(region_u8, (target_w, target_h), interpolation=cv2.INTER_AREA)
+
+        # Sobel gradients
+        gx = cv2.Sobel(region_rs.astype(np.float32), cv2.CV_32F, 1, 0, ksize=3)
+        gy = cv2.Sobel(region_rs.astype(np.float32), cv2.CV_32F, 0, 1, ksize=3)
+        mag = np.sqrt(gx * gx + gy * gy)
+        ang = np.arctan2(gy, gx) * (180.0 / np.pi)  # -180 to 180
+
+        # Weighted orientation histogram (unsigned, 0-180)
+        ang_unsigned = ang % 180.0
+        mask = mag > 5.0
+        hist, _ = np.histogram(
+            ang_unsigned[mask], bins=n_bins, range=(0.0, 180.0),
+            weights=mag[mask]
+        )
+        norm = float(np.linalg.norm(hist))
+        if norm > 1e-6:
+            hist = hist / norm
+        return hist.astype(np.float32)
+
+    def filter_hog_prototype(
+        self,
+        high_conf: List[dict],
+        borderline: List[dict],
+        drawing: np.ndarray,
+        min_sim: float = 0.72,
+    ) -> List[dict]:
+        """Filter borderline candidates using the HOG prototype of confirmed TPs.
+
+        **Algorithm (Self-Supervised HOG Prototype):**
+
+        1. Extract gradient-orientation histogram (HOG) for each high-confidence
+           detection — these are the confirmed True Positives for this drawing.
+        2. Compute their mean = the "prototype" HOG for this symbol in this
+           specific drawing style and scale.
+        3. Score each borderline candidate by cosine similarity to the prototype.
+        4. Accept only those above `min_sim`.
+
+        Why HOG works here:
+        - Resistors (ANSI zigzag): dominant gradients at +/-45 deg (diagonal strokes)
+        - Inductors (coil): dominant gradients at 0 deg and 90 deg (arcs + baselines)
+        - Transistors: mixed asymmetric gradients
+        - Batteries/sources: mostly 0/90 deg gradients (rectangular)
+
+        The prototype captures the specific drawing style's gradient fingerprint;
+        FPs with a different gradient distribution are rejected.
+
+        Requires >= 3 high-confidence examples to form a reliable prototype.
+        """
+        if len(high_conf) < 3 or not borderline:
+            return high_conf + borderline
+
+        # Build prototype
+        hc_feats = np.array([self._hog_feature(drawing, c) for c in high_conf])
+        prototype = hc_feats.mean(axis=0)
+        proto_norm = float(np.linalg.norm(prototype))
+        if proto_norm < 1e-6:
+            return high_conf + borderline
+        prototype_unit = prototype / proto_norm
+
+        # Score borderline candidates
+        accepted, rejected = [], []
+        for c in borderline:
+            feat = self._hog_feature(drawing, c)
+            feat_norm = float(np.linalg.norm(feat))
+            sim = float(np.dot(prototype_unit, feat / (feat_norm + 1e-8)))
+            c_out = dict(c)
+            c_out["hog_sim"] = round(sim, 3)
+            if sim >= min_sim:
+                accepted.append(c_out)
+            else:
+                rejected.append(c_out)
+
+        if rejected:
+            print(
+                f"[Postprocessor] HOG prototype: {len(borderline)} border -> "
+                f"{len(accepted)} accepted, {len(rejected)} rejected "
+                f"(sim_threshold={min_sim})"
+            )
+        return high_conf + accepted

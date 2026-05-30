@@ -6,6 +6,7 @@ const API = '';  // same origin
 let patternFile = null;
 let drawingFile = null;
 let vizB64 = null;
+let lastDetections = [];
 
 // ---- DOM refs ----
 const patternDropzone  = document.getElementById('patternDropzone');
@@ -220,6 +221,7 @@ function confClass(conf) {
 
 function renderResults(data) {
   const dets = data.detections || [];
+  lastDetections = dets;
   const n = data.total_detections;
 
   // Stats
@@ -246,6 +248,8 @@ function renderResults(data) {
   // Detection list
   detectionCount.textContent = n;
   detectionsList.innerHTML = '';
+  const csvBtn = document.getElementById('csvBtn');
+  if (csvBtn) csvBtn.style.display = n > 0 ? 'inline-flex' : 'none';
 
   if (n === 0) {
     detectionsList.innerHTML = `
@@ -296,13 +300,39 @@ function renderResults(data) {
   resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-// ---- Download ----
+// ---- Download image ----
 downloadBtn.addEventListener('click', () => {
   if (!vizB64) return;
   const a = document.createElement('a');
   a.href = 'data:image/png;base64,' + vizB64;
   a.download = 'detection_result.png';
   a.click();
+});
+
+// ---- Download CSV ----
+document.addEventListener('click', async (e) => {
+  if (e.target.closest('#csvBtn')) {
+    if (!lastDetections.length) return;
+    const rows = [['id','x','y','width','height','confidence','ncc_score','dino_score','scale','angle']];
+    lastDetections.forEach((d, i) => {
+      const b = d.bbox;
+      rows.push([
+        i + 1, b.x, b.y, b.w, b.h,
+        (d.confidence || 0).toFixed(4),
+        (d.ncc_score || 0).toFixed(4),
+        (d.dino_score || 0).toFixed(4),
+        (d.scale || 1).toFixed(4),
+        (d.angle || 0).toFixed(1),
+      ]);
+    });
+    const csv = rows.map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'detections.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
 });
 
 // ---- Initial status check ----
