@@ -55,8 +55,38 @@ class PatternDetectionPipeline:
             batch_size=32,
         )
 
+        # Stage 3 (optional): Vision-Language Model semantic filter.
+        # Rejects false positives that survive NCC + DINOv2 because they share
+        # low-level structure with the target symbol (inductor/crystal/op-amp vs
+        # resistor). Uses open-classification (not yes/no) to avoid small-VLM
+        # agreement bias. Lazy-loaded: the ~4.5 GB model is only fetched on first
+        # use, so use_vlm=False keeps the pipeline lightweight (and tests green).
+        self.use_vlm = cfg.get("use_vlm", False)
+        self.vlm_model_name = cfg.get("vlm_model", "Qwen/Qwen2-VL-2B-Instruct")
+        self.vlm_symbol_name = cfg.get("vlm_symbol_name")  # optional class hint
+        # Only borderline candidates are sent to the VLM. High-confidence detections
+        # (>= this) are trusted and kept WITHOUT asking — the 2B model mislabels some
+        # genuine high-conf resistors as "transistor", so shielding them avoids
+        # false rejections while still letting the VLM prune the noisy borderline band.
+        self.vlm_keep_min_conf = cfg.get("vlm_keep_min_conf", 0.75)
+        self._vlm = None  # lazy VLMVerifier instance
+
         print(f"[Pipeline] Device: {self.dino_verifier.device}")
+        print(f"[Pipeline] VLM Stage-3: {'ENABLED' if self.use_vlm else 'disabled'}")
         print("[Pipeline] All stages initialized.")
+
+    def _get_vlm(self):
+        """Lazily construct the VLMVerifier (defers the heavy import + model load)."""
+        if self._vlm is None:
+            from .vlm_verifier import VLMVerifier
+            self._vlm = VLMVerifier(
+                model_name=self.vlm_model_name,
+                device=self.dino_verifier.device.type
+                if hasattr(self.dino_verifier.device, "type")
+                else None,
+                symbol_name=self.vlm_symbol_name,
+            )
+        return self._vlm
 
     def _template_upscale_factor(
         self,
@@ -629,6 +659,21 @@ class PatternDetectionPipeline:
                 verified = self.postprocessor.filter_confidence_gap(verified)
                 if len(verified) != before_gap:
                     print(f"[Pipeline] Confidence gap filter: {before_gap} -> {len(verified)}")
+
+            # Stage 3 (optional): VLM semantic filter.
+            # Runs AFTER all spatial/structural filters and BEFORE final NMS so the
+            # VLM only judges a small, already-pruned candidate set (fast: ~0.4s/crop).
+            # Zero-shot: the template's own VLM class defines the target, so no
+            # symbol name is hardcoded. Removes inductor/crystal/op-amp FPs that
+            # share low-level structure with the target and pass DINOv2.
+            if self.use_vlm and verified:
+                before_vlm = len(verified)
+                vlm = self._get_vlm()
+                verified = vlm.filter_by_template_class(
+                    drawing_proc, pattern_proc, verified,
+                    keep_min_conf=self.vlm_keep_min_conf, verbose=True
+                )
+                print(f"[Pipeline] VLM Stage-3 filter: {before_vlm} -> {len(verified)}")
 
             # Final NMS + format
             # Simple templates: tight IoU (0.25), no union expand (keep best-fit bbox).

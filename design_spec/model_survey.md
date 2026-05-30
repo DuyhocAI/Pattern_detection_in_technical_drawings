@@ -238,6 +238,48 @@ overhead. The 10-test suite remains green.
 
 ---
 
+## Empirical Validation: VLM Stage-3 (Qwen2-VL-2B)
+
+A local Vision-Language Model was added as an **optional** Stage-3 semantic filter
+(`src/vlm_verifier.py`, flag `use_vlm`, default off). It runs after all spatial
+filters and judges each surviving candidate by *what the symbol is*, targeting the
+exact FP classes (inductor/crystal/op-amp/diode) that DINOv2 cannot separate.
+
+**Finding 1 — yes/no prompting fails on small VLMs.** Asking "is this a resistor?"
+made Qwen2-VL-2B answer "yes" to 40/40 candidates (including wire junctions). The
+2B model has a strong agreement bias on close-ended questions.
+
+**Finding 2 — open-classification breaks the bias.** Forcing the model to NAME the
+component from a closed vocabulary (resistor/inductor/.../wire-junction) split the
+same 40 crops into 7 resistor / 33 other. We keep only candidates whose class
+matches the *template's own* VLM class (stays zero-shot — no hardcoded "resistor").
+Caveat: the 2B model's labels are individually unreliable (it calls many ambiguous
+crops "transistor"), but resistor-vs-not is usable.
+
+**Finding 3 — restrict the VLM to the borderline band.** On the user's full
+schematic (25 raw detections):
+
+| Config | Detections | Notes |
+|--------|-----------|-------|
+| VLM off | 25 | many FPs (op-amp, diode, inductor, junctions) |
+| VLM on (all candidates) | 6 | over-aggressive — drops genuine resistors at conf 0.81–0.85 |
+| **VLM on (conf < 0.75 only)** | **13** | high-conf TPs shielded; only noisy borderline band judged |
+
+True positives cluster at conf ≥ 0.75 and FPs at ≤ 0.67, so `vlm_keep_min_conf=0.75`
+auto-keeps trusted detections and asks the VLM only about the 0.45–0.75 band where
+TP/FP overlap. Every candidate the VLM dropped in this mode had conf ≤ 0.74 and was
+a genuine FP (transistor/diode/op-amp).
+
+**Cost:** ~0.4 s/crop on RTX 3060 (12 GB), ~4.5 GB bf16 weights, lazy-loaded.
+
+**Decision:** kept behind `use_vlm` (default off) with `vlm_keep_min_conf=0.75`.
+The default NCC + DINOv2 pipeline stays lightweight and the 10-test suite green;
+enabling the VLM trades latency for materially fewer false positives. Contrast with
+CLIP (above), which gave no separation at all — the VLM's language reasoning is what
+makes the difference DINOv2/CLIP embeddings could not.
+
+---
+
 ## Recommendation
 
 For the **current zero-shot requirement**:

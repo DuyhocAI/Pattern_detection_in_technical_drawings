@@ -78,6 +78,13 @@ async def index():
     return html_path.read_text(encoding="utf-8")
 
 
+def _coerce_bool(val) -> bool:
+    """Form values arrive as strings; coerce 'true'/'1'/'on' to bool."""
+    if isinstance(val, bool):
+        return val
+    return str(val).strip().lower() in ("true", "1", "on", "yes")
+
+
 @app.post("/api/detect")
 async def detect(
     pattern: UploadFile = File(...),
@@ -86,6 +93,7 @@ async def detect(
     ncc_threshold: float = Form(0.55),
     cosine_threshold: float = Form(0.84),
     final_nms_iou: float = Form(0.4),
+    use_vlm: str = Form("false"),
 ):
     try:
         t_start = time.time()
@@ -96,17 +104,14 @@ async def detect(
         pattern_np = upload_to_numpy(pattern_bytes)
         drawing_np = upload_to_numpy(drawing_bytes)
 
-        config = {
-            "ncc_threshold": ncc_threshold,
-            "cosine_threshold": cosine_threshold,
-            "final_nms_iou": final_nms_iou,
-        }
         pipeline = get_pipeline()
         pipeline.update_thresholds(
             ncc_threshold=ncc_threshold,
             cosine_threshold=cosine_threshold,
             final_nms_iou=final_nms_iou,
         )
+        # VLM Stage-3 is toggled at runtime (model lazy-loads on first enable).
+        pipeline.use_vlm = _coerce_bool(use_vlm)
 
         if mode == "auto":
             result = pipeline.detect_auto(pattern_np, drawing_np, return_visualization=True)
@@ -162,6 +167,7 @@ async def detect_csv(
     ncc_threshold: float = Form(0.55),
     cosine_threshold: float = Form(0.84),
     final_nms_iou: float = Form(0.4),
+    use_vlm: str = Form("false"),
 ):
     """Run detection and return results as a downloadable CSV file."""
     try:
@@ -176,6 +182,7 @@ async def detect_csv(
             cosine_threshold=cosine_threshold,
             final_nms_iou=final_nms_iou,
         )
+        pipeline.use_vlm = _coerce_bool(use_vlm)
         if mode == "auto":
             result = pipeline.detect_auto(pattern_np, drawing_np, return_visualization=False)
         else:
