@@ -50,6 +50,18 @@
           </div>
         </label>
       </div>
+      <div class="setting-row">
+        <label class="toggle-label">
+          <span>VLM filter <span class="setting-tag">Qwen2-VL</span></span>
+          <div class="toggle" id="vlmToggle">
+            <input type="checkbox" id="useVlm" />
+            <span class="toggle-slider"></span>
+          </div>
+        </label>
+        <p class="setting-hint">Local vision-language model rejects false
+          positives on borderline matches. More accurate, slower (first run
+          downloads ~4.5&nbsp;GB).</p>
+      </div>
     </div>
 
     <div class="sidebar-section" id="manualSettings" style="display:none;">

@@ -189,6 +189,7 @@ runBtn.addEventListener('click', async () => {
     formData.append('ncc_threshold', nccSlider.value);
     formData.append('cosine_threshold', dinoSlider.value);
     formData.append('final_nms_iou', nmsSlider.value);
+    formData.append('use_vlm', document.getElementById('useVlm').checked);
 
     const resp = await fetch(`${API}/api/detect`, { method: 'POST', body: formData });
     clearInterval(stageTimer);
