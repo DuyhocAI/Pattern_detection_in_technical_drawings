@@ -12,40 +12,47 @@ app_port: 7860
 
 ![Python](https://img.shields.io/badge/python-3.9%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-[![HuggingFace Demo](https://img.shields.io/badge/🤗-Demo-yellow)](https://huggingface.co/spaces/PLACEHOLDER)
 
 ## Overview
 
-This project solves the problem of finding all occurrences of a given pattern (e.g., a component symbol) inside large engineering BOM drawings — with **zero training data**. The pipeline combines classical NCC template matching for fast candidate proposal with DINOv2 ViT-S/14 self-supervised features for accurate zero-shot verification. No fine-tuning or labeled data is required: any pattern can be detected at inference time.
+Find every occurrence of a given component symbol inside large engineering BOM drawings — with **zero training data**. The pipeline combines three stages: classical NCC template matching (fast candidate proposal) → DINOv2 ViT-S/14 self-supervised verification → optional Qwen2-VL-2B semantic filter. No fine-tuning or labelled data needed; any pattern works at inference time.
 
 ## Pipeline Architecture
 
 ```
 [Pattern Image] ──┐
-                  ├──► Stage 0: Preprocess ──► Stage 1: NCC Multi-scale
-[Drawing Image] ──┘         (binarize,              (propose 30–200
-                              denoise)                candidates, CPU)
-                                                          │
-                                                          ▼
-                                              Stage 2: DINOv2 Verify
-                                              (cosine similarity filter,
-                                               zero-shot, CPU/GPU)
-                                                          │
-                                                          ▼
-                                              Stage 4: Post-process
-                                              (IoU-NMS, format JSON,
-                                               draw bounding boxes)
-                                                          │
-                                                          ▼
-                                              [BBoxes + Score JSON]
+                  ├──► Stage 0: Preprocess  ──► Stage 1: NCC Multi-scale
+[Drawing Image] ──┘      (binarize, denoise)      (multi-angle candidate
+                                                   proposal on CPU)
+                                                        │
+                                                        ▼
+                                            Stage 2: DINOv2 Verify
+                                            (cosine similarity, zero-shot,
+                                             orientation-invariant crops)
+                                                        │
+                                                        ▼
+                                          Stage 2b: Structural Filters
+                                          (wire-leads, Chamfer, NMS,
+                                           confidence-gap pruning)
+                                                        │
+                                             [use_vlm=True only]
+                                                        │
+                                                        ▼
+                                            Stage 3: VLM Filter
+                                            (Qwen2-VL-2B open-classification,
+                                             borderline candidates only)
+                                                        │
+                                                        ▼
+                                            [BBoxes + Score JSON]
 ```
 
-| Stage | Module | Purpose | Typical Time |
-|-------|--------|---------|-------------|
-| 0 | Preprocessor | Adaptive binarize, denoise | < 0.5s |
-| 1 | NCCMatcher | Multi-scale + rotation candidate proposal | 5–15s CPU |
-| 2 | DINOVerifier | Zero-shot cosine similarity filter | 5–15s CPU |
-| 4 | Postprocessor | Final NMS, JSON output, visualization | < 0.1s |
+| Stage | Module | Purpose | Typical time (GPU) |
+|-------|--------|---------|-------------------|
+| 0 | `Preprocessor` | Adaptive binarize, denoise | < 0.5 s |
+| 1 | `NCCMatcher` | Multi-scale + rotation candidate proposal | 15–60 s |
+| 2 | `DINOVerifier` | Zero-shot cosine similarity filter | 2–10 s |
+| 2b | `Postprocessor` | Wire-lead / Chamfer / NMS / gap filter | < 0.5 s |
+| 3 | `VLMVerifier` | Qwen2-VL-2B semantic cross-check (optional) | ~0.4 s/crop |
 
 ## Installation
 
@@ -55,32 +62,30 @@ cd pattern-detection-bom
 pip install -r requirements.txt
 ```
 
-DINOv2 weights are downloaded automatically at first run via `torch.hub` — no manual download needed.
+DINOv2 weights download automatically via `torch.hub` on first run. VLM weights (`Qwen/Qwen2-VL-2B-Instruct`, ~5 GB) download automatically from HuggingFace on first VLM-enabled run.
 
 ## Quick Start
 
 ### Python API
 
 ```python
-from src.pipeline import run_detection
+from src.pipeline import PatternDetectionPipeline
 
-result = run_detection("pattern.png", "drawing.png")
-print(result)
+pipe = PatternDetectionPipeline()
+result = pipe.detect_auto("pattern.png", "drawing.png")
+print(result["total_detections"])
+for d in result["detections"]:
+    print(d["bbox"], d["confidence"])
 ```
 
 ### Web UI (local)
 
 ```bash
-python app/app.py
+python app/web/server.py
+# open http://localhost:8000
 ```
 
-Then open `http://localhost:8000` in your browser. The dashboard lets you upload a pattern and drawing, adjust detection thresholds via sliders, and view annotated results.
-
-### CLI Tuning
-
-```bash
-python scripts/tune_thresholds.py --examples_dir examples --quick
-```
+Upload a pattern and drawing, click **Detect**, and view annotated results. The **Use VLM** checkbox activates the optional Stage-3 semantic filter.
 
 ## Output Format
 
@@ -88,11 +93,11 @@ python scripts/tune_thresholds.py --examples_dir examples --quick
 {
   "detections": [
     {
-      "bbox": {"x": 142, "y": 310, "w": 64, "h": 64},
-      "confidence": 0.83,
-      "ncc_score": 0.7812,
-      "dino_score": 0.8754,
-      "scale": 1.0,
+      "bbox": {"x": 142, "y": 310, "w": 64, "h": 32},
+      "confidence": 0.91,
+      "ncc_score": 0.72,
+      "dino_score": 0.88,
+      "scale": 1.05,
       "angle": 0.0
     }
   ],
@@ -105,52 +110,61 @@ python scripts/tune_thresholds.py --examples_dir examples --quick
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `scales` | `[0.85..1.15]` | Scale range for template resizing in Stage 1 |
-| `angles` | `[-10..10]` | Rotation sweep in Stage 1 (degrees) |
-| `ncc_threshold` | `0.55` | Minimum NCC score to propose a candidate (low = high recall) |
-| `nms_iou_threshold` | `0.3` | IoU threshold for NMS in Stage 1 |
-| `dino_model` | `dinov2_vits14` | DINOv2 variant: `vits14` (fast) or `vitb14` (accurate) |
-| `cosine_threshold` | `0.84` | Minimum cosine similarity to accept a detection |
-| `final_nms_iou` | `0.4` | Final IoU threshold after Stage 2 |
-
-Override via config dict:
+| `ncc_threshold` | `0.55` (strict) / `0.47` (relaxed) | NCC score gate for candidate proposal |
+| `cosine_threshold` | `0.84` | DINOv2 cosine similarity gate |
+| `use_vlm` | `False` | Enable Stage-3 VLM semantic filter |
+| `vlm_model` | `Qwen/Qwen2-VL-2B-Instruct` | VLM model ID (HuggingFace) |
+| `vlm_keep_min_conf` | `0.75` | Candidates above this are trusted; VLM is not called |
+| `vlm_reject_only` | `True` | Blacklist mode: drop only candidates the VLM confidently identifies as a different component |
+| `vlm_recall_boost` | follows `use_vlm` | Widen the scale sweep and relax Chamfer gates when VLM is on |
+| `vlm_symbol_name` | `None` | Optional hint for VLM classification prompt |
 
 ```python
-from src.pipeline import PatternDetectionPipeline
-
-pipeline = PatternDetectionPipeline(config={
-    "ncc_threshold": 0.60,
-    "cosine_threshold": 0.80,
-    "dino_model": "dinov2_vitb14",
+pipe = PatternDetectionPipeline(config={
+    "use_vlm": True,
+    "vlm_symbol_name": "a resistor (zigzag or plain rectangle)",
+    "vlm_keep_min_conf": 0.78,
 })
-result = pipeline.detect("pattern.png", "drawing.png")
+result = pipe.detect_auto("resistor_template.png", "schematic.png")
 ```
 
 ## Approach & Design Choices
 
-### Why DINOv2 instead of a fine-tuned model?
+### Stage 1 — NCC Template Matching
 
-DINOv2 is trained self-supervised on 142M images and produces patch-level features that capture geometric structure rather than texture or color. Engineering drawings (line art on white background) are a significant domain shift from natural photos, yet DINOv2 generalizes well because its features encode shape primitives. Crucially, **no fine-tuning means truly zero-shot operation** — the model works for any new pattern without collecting labeled data.
+Multi-scale, multi-angle normalized cross-correlation proposes 30–300 candidate regions per drawing. The threshold is kept intentionally low (high recall); false positives are cleaned up downstream. Two passes run in sequence: a strict pass (NCC ≥ 0.55) and a relaxed pass (NCC ≥ 0.47). For complex templates a third rotated pass (0° and 90°) is added automatically.
 
-### Why hybrid NCC + DINOv2?
+### Stage 2 — DINOv2 Zero-Shot Verification
 
-- **NCC alone** is fast but brittle: it fails under lighting variation, noise, and even small domain differences.
-- **DINOv2 alone** (brute-force sliding window) over a large drawing would be prohibitively slow on CPU.
-- The hybrid approach uses NCC for high-recall candidate generation (~30–200 boxes), then DINOv2 as an intelligent filter. This gives the accuracy of a neural verifier at a fraction of the cost.
+DINOv2 ViT-S/14 produces orientation-invariant patch features by normalizing crops to a canonical pose before embedding. Candidates are kept only if their cosine similarity to the template embedding exceeds `cosine_threshold`. DINOv2 generalizes well to engineering line-art despite being trained on natural images because it captures shape primitives rather than texture.
 
-### Trade-offs
+The hybrid NCC → DINOv2 design is key: NCC is fast on CPU but brittle; DINOv2 is accurate but a dense sliding-window would be prohibitively slow. Combining them gives neural-level accuracy at a fraction of the cost.
 
-- NCC threshold is intentionally low (0.55) to maximize recall at Stage 1; false positives are cleaned up by DINOv2.
-- ViT-S/14 (21M params) is chosen over ViT-B/14 for speed on CPU deployments; swap to `vitb14` for higher accuracy.
-- The pipeline runs on CPU in ~20–40s for typical A3 drawings; GPU reduces Stage 2 to 2–5s.
+### Stage 2b — Structural Filters
 
-## Limitations & Future Work
+A suite of geometry-based post-processors reject common false positives that NCC and DINOv2 cannot separate:
 
-- **Small templates (< 28px):** DINOv2 Stage 2 is skipped for very small patterns; only NCC is used.
-- **Heavy rotation (> 15°):** The sweep is limited to ±10° by default; large rotations require wider sweep at extra cost.
-- **Identical-looking components:** Two structurally similar but semantically different symbols may confuse the cosine verifier.
-- **Throughput:** Not optimized for batch processing of many drawings; a production system would benefit from ONNX export and TensorRT.
-- **Optional Stage 3 (LightGlue):** Geometric keypoint verification for handling significant rotation/scale variation is planned but not yet integrated.
+- **Wire-lead filter** — a real component has visible wire leads protruding from its bbox.
+- **Chamfer distance filter** — rejects crops whose edge silhouette diverges too far from the template.
+- **Neighborhood complexity filter** — genuine components sit in a locally sparse region; text/grid regions are excluded.
+- **Junction-dot and rect-integrity filters** — reject L-junctions, connector dots, and partial matches.
+- **Confidence-gap filter** — drops a trailing cluster of low-confidence candidates when a clear gap exists above them.
+
+### Stage 3 — VLM Semantic Filter (optional)
+
+`VLMVerifier` uses Qwen2-VL-2B in an open-classification mode: each borderline candidate crop is labelled into a closed 10-class component vocabulary. Candidates the VLM calls a concretely different component (inductor, capacitor, diode, op-amp, crystal, logic-gate) are dropped.
+
+**Why blacklist instead of whitelist?** The 2B model defaults ambiguous line-art to "transistor" — a strict whitelist wrongly discards genuine resistors it mislabels. The blacklist (`vlm_reject_only=True`) preserves them while still removing clearly wrong labels.
+
+**Why open-classification?** Yes/no confirmation gives 100% agreement bias with small VLMs. Forced open-classification breaks the bias.
+
+High-confidence candidates (≥ `vlm_keep_min_conf`) are never sent to the VLM — they are trusted unconditionally. This shields correct detections from the 2B model's occasional mislabelling.
+
+## Limitations
+
+- **VLM labels are individually noisy** at 2B scale. The filter is effective at the population level (cuts ~20–30% of borderline FPs) but may miss individual errors.
+- **Heavy rotation (> 15°):** The standard sweep covers ±10°; complex templates add 0° and 90° passes. Arbitrary angles require a wider sweep at extra cost.
+- **Throughput:** Single-drawing processing. A production system would benefit from ONNX export.
 
 ## License
 
