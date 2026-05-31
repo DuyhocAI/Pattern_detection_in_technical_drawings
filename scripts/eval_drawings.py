@@ -12,7 +12,7 @@ DRAWINGS_DIR = r"D:\Sotatek_Assessment\drawings"
 
 
 def main():
-    pattern = os.path.join(DRAWINGS_DIR, "test_1.png")  # resistor simple template
+    pattern = os.path.join(DRAWINGS_DIR, "test_2.png")  # resistor simple template
     drawings = [os.path.join(DRAWINGS_DIR, f"{i}.png") for i in range(1, 7)]
 
     if not os.path.exists(pattern):
