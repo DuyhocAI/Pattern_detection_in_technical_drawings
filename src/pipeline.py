@@ -64,11 +64,20 @@ class PatternDetectionPipeline:
         self.use_vlm = cfg.get("use_vlm", False)
         self.vlm_model_name = cfg.get("vlm_model", "Qwen/Qwen2-VL-2B-Instruct")
         self.vlm_symbol_name = cfg.get("vlm_symbol_name")  # optional class hint
+        # Recall-boost mode: widen the scale sweep and lower the DINOv2 gate so
+        # more genuine instances survive to Stage 3. Only safe when the VLM is on
+        # to scrub the extra false positives it surfaces. Defaults to follow use_vlm.
+        self.vlm_recall_boost = cfg.get("vlm_recall_boost", self.use_vlm)
         # Only borderline candidates are sent to the VLM. High-confidence detections
         # (>= this) are trusted and kept WITHOUT asking — the 2B model mislabels some
         # genuine high-conf resistors as "transistor", so shielding them avoids
         # false rejections while still letting the VLM prune the noisy borderline band.
         self.vlm_keep_min_conf = cfg.get("vlm_keep_min_conf", 0.75)
+        # reject-only (blacklist) mode: the VLM drops a candidate only when it
+        # confidently names a different, visually-distinct component. Maximises
+        # recall vs a strict whitelist that discarded resistors the 2B model
+        # mislabelled as "transistor". See VLMVerifier.filter_by_template_class.
+        self.vlm_reject_only = cfg.get("vlm_reject_only", True)
         self._vlm = None  # lazy VLMVerifier instance
 
         print(f"[Pipeline] Device: {self.dino_verifier.device}")
@@ -350,7 +359,14 @@ class PatternDetectionPipeline:
                 _use_probe_focused = _no_std_candidates or _best_probe_s > 1.40
 
                 if _use_probe_focused:
-                    _fracs = [0.80, 0.85, 0.90, 0.95, 1.0, 1.05, 1.10, 1.15, 1.20]
+                    # Recall-boost widens the scale sweep beyond ±20% so resistors
+                    # drawn at sizes other than the probed peak are still searched.
+                    # Safe only with the VLM downstream to reject the extra FPs.
+                    if self.vlm_recall_boost:
+                        _fracs = [0.55, 0.65, 0.75, 0.85, 0.95, 1.0,
+                                  1.05, 1.15, 1.25, 1.40, 1.55]
+                    else:
+                        _fracs = [0.80, 0.85, 0.90, 0.95, 1.0, 1.05, 1.10, 1.15, 1.20]
                     _micro_scales = sorted(set(
                         round(_best_probe_s * f, 2)
                         for f in _fracs if 0.20 <= _best_probe_s * f <= 3.0
@@ -362,7 +378,11 @@ class PatternDetectionPipeline:
                         print(f"[Pipeline] Std candidates dropped (probe scale {_best_probe_s:.2f} > standard range)")
                     # Stricter DINOv2 for probe-focused micro passes to compensate for
                     # the broader search area and reduce FPs from similarly-shaped components.
-                    _micro_dino = min(0.88, max(0.82, _best_probe_ncc * 1.04))
+                    # Recall-boost lowers this gate (the VLM is the precision backstop).
+                    if self.vlm_recall_boost:
+                        _micro_dino = 0.80
+                    else:
+                        _micro_dino = min(0.88, max(0.82, _best_probe_ncc * 1.04))
                     # No 3b bump for probe-focused path: 90°-rotated candidates have naturally
                     # lower DINOv2 scores; an extra +0.01 would cut real vertical detections.
                     _micro_dino_3b = _micro_dino
@@ -422,8 +442,11 @@ class PatternDetectionPipeline:
                     # Standard path skips Chamfer: IEC has some candidates with
                     # Chamfer 9–10 due to bbox distortion from the dilated-template
                     # pass; filtering them drops real detections.
+                    # Recall-boost relaxes Chamfer (the VLM scrubs the extra FPs it lets
+                    # through); otherwise keep the tight 5.0 / 4.0 structural gates.
+                    _chamfer_max = 7.0 if self.vlm_recall_boost else 5.0
                     all_complex = self.postprocessor.filter_chamfer_shape(
-                        all_complex, drawing_proc, pattern_proc, max_chamfer=5.0
+                        all_complex, drawing_proc, pattern_proc, max_chamfer=_chamfer_max
                     )
                     if len(all_complex) != before_ch:
                         print(f"[Pipeline] Chamfer filter: {before_ch} -> {len(all_complex)}")
@@ -432,14 +455,16 @@ class PatternDetectionPipeline:
                     # ~3.3 (measured); vertical TPs can reach ~4.1 due to rotation/resize.
                     # Candidates with angle ≈ 0° and Chamfer 4.0–5.0 are structural FPs
                     # (inductors, transistors) that the global 5.0 threshold misses.
-                    before_hch = len(all_complex)
-                    all_complex = [
-                        c for c in all_complex
-                        if abs(c.get("angle", 0)) >= 45
-                        or c.get("chamfer_dist", 0) <= 4.0
-                    ]
-                    if len(all_complex) != before_hch:
-                        print(f"[Pipeline] Chamfer H filter: {before_hch} -> {len(all_complex)}")
+                    # Skipped under recall-boost — the VLM handles those FPs instead.
+                    if not self.vlm_recall_boost:
+                        before_hch = len(all_complex)
+                        all_complex = [
+                            c for c in all_complex
+                            if abs(c.get("angle", 0)) >= 45
+                            or c.get("chamfer_dist", 0) <= 4.0
+                        ]
+                        if len(all_complex) != before_hch:
+                            print(f"[Pipeline] Chamfer H filter: {before_hch} -> {len(all_complex)}")
 
                 # Output-bubble filter: only for gate-like templates at unusual scales.
                 # XOR/XNOR output bubbles match the gate body; filter them out.
@@ -654,7 +679,10 @@ class PatternDetectionPipeline:
             # Only applied to complex templates -- simple templates use dedicated
             # structural filters (wire-leads, chamfer, DINO-prototype) that are more
             # precise; the gap filter risks removing genuine low-confidence TPs there.
-            if not _is_simple:
+            # Skipped under recall-boost: the gap filter drops the low-confidence
+            # cluster, which is exactly where borderline-but-genuine resistors live.
+            # With the VLM on we keep them and let Stage 3 decide per-candidate.
+            if not _is_simple and not self.vlm_recall_boost:
                 before_gap = len(verified)
                 verified = self.postprocessor.filter_confidence_gap(verified)
                 if len(verified) != before_gap:
@@ -672,7 +700,8 @@ class PatternDetectionPipeline:
                     vlm = self._get_vlm()
                     verified = vlm.filter_by_template_class(
                         drawing_proc, pattern_proc, verified,
-                        keep_min_conf=self.vlm_keep_min_conf, verbose=True
+                        keep_min_conf=self.vlm_keep_min_conf,
+                        reject_only=self.vlm_reject_only, verbose=True
                     )
                     print(f"[Pipeline] VLM Stage-3 filter: {before_vlm} -> {len(verified)}")
                 except Exception as vlm_err:

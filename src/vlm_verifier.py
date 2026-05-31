@@ -174,6 +174,12 @@ class VLMVerifier:
         "transistor", "op-amp", "logic-gate", "wire-junction", "other",
     ]
 
+    # Labels the 2B model assigns unreliably: it defaults ambiguous line-art to
+    # "transistor", and "other"/"wire-junction" are catch-alls. A candidate with
+    # one of these is NOT confidently a non-target, so in reject-only mode we keep
+    # it rather than risk discarding a genuine target the model just mislabelled.
+    _UNTRUSTED_LABELS = {"transistor", "wire-junction", "other"}
+
     def _build_prompt(self) -> str:
         sym = self.symbol_name or "the reference component symbol shown in the first image"
         return (
@@ -295,27 +301,41 @@ class VLMVerifier:
         candidates: List[dict],
         target_class: Optional[str] = None,
         keep_min_conf: float = 1.01,
+        reject_only: bool = True,
         verbose: bool = False,
     ) -> List[dict]:
         """Open-classification Stage-3 filter (robust to small-VLM yes-bias).
 
-        Each candidate crop is classified into a closed component vocabulary; only
-        those whose class matches the template's class survive. This avoids the
-        yes/no agreement bias that made the confirm-style prompt keep 100% of
-        candidates (see scripts/poc_vlm.py vs poc_vlm_classify.py).
+        Two modes:
+          * reject_only=True (default): blacklist. Drop a candidate ONLY when the
+            VLM confidently names it a DIFFERENT, visually-distinct component
+            (inductor/capacitor/diode/op-amp/crystal/logic-gate). Candidates the
+            VLM calls the target — or gives an unreliable label (transistor/other/
+            wire-junction) — are KEPT. Maximises recall: the 2B model mislabels
+            many genuine resistors as "transistor", so a strict whitelist wrongly
+            discards them.
+          * reject_only=False: whitelist. Keep only candidates the VLM labels as
+            the target class. Higher precision, lower recall.
 
         Args:
-            target_class: Class candidates must match. If None, derived from the
-                template via classify_template().
+            target_class: Class candidates must match / not contradict. If None,
+                derived from the template via classify_template().
             keep_min_conf: Candidates with confidence >= this are kept WITHOUT
                 asking the VLM (trusted high-conf detections; saves inference).
-                Default 1.01 = always ask.
+            reject_only: see above.
         """
         if not candidates:
             return []
         self._ensure_loaded()
         if target_class is None:
             target_class = self.classify_template(template)
+
+        # In reject-only mode a label triggers a drop only if it is a trusted,
+        # concretely-different component class (not the unreliable catch-alls).
+        reject_labels = {
+            cls for cls in self._CLASSES
+            if cls != target_class and cls not in self._UNTRUSTED_LABELS
+        }
 
         kept = []
         for c in candidates:
@@ -326,12 +346,17 @@ class VLMVerifier:
             crop = self._crop_for_vlm(drawing, c)
             label, raw = self._classify_one(crop)
             c["vlm_class"] = label
+            if reject_only:
+                keep = label not in reject_labels
+            else:
+                keep = label == target_class
             if verbose:
                 print(f"  [VLM] ({c['x']},{c['y']}) conf={c.get('confidence',0):.2f} "
-                      f"-> {label!r} {'KEEP' if label == target_class else 'DROP'}")
-            if label == target_class:
+                      f"-> {label!r} {'KEEP' if keep else 'DROP'}")
+            if keep:
                 kept.append(c)
-        print(f"[VLMVerifier] class-filter ({target_class}): "
+        mode = "reject-only" if reject_only else "whitelist"
+        print(f"[VLMVerifier] class-filter ({target_class}, {mode}): "
               f"{len(candidates)} -> {len(kept)} kept")
         return kept
 

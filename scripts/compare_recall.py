@@ -1,6 +1,7 @@
-"""End-to-end comparison on the user's actual schematic: VLM off vs on.
-
-Saves two annotated PNGs so the FP reduction is directly visible.
+"""Compare VLM filter modes on the user's schematic (both recall-boost ON):
+  - whitelist  : keep only VLM-labelled 'resistor'  (high precision, low recall)
+  - reject-only: drop only confident non-target classes (high recall)
+Saves annotated PNGs for visual comparison.
 """
 import os
 import sys
@@ -18,40 +19,33 @@ OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                    "debug_output")
 
 
-def run(use_vlm: bool, tag: str):
-    print(f"\n########## use_vlm={use_vlm} ##########")
+def run(reject_only: bool, tag: str):
+    print(f"\n########## reject_only={reject_only} (boost+VLM) ##########")
     pipe = PatternDetectionPipeline(config={
-        "use_vlm": use_vlm,
+        "use_vlm": True,
+        "vlm_recall_boost": True,
+        "vlm_reject_only": reject_only,
         "vlm_symbol_name": "a resistor (zigzag or plain rectangle)",
     })
     t0 = time.time()
     result = pipe.detect_auto(PATTERN, DRAWING, return_visualization=True)
     dt = time.time() - t0
     n = result["total_detections"]
-    outpath = os.path.join(OUT, f"compare_{tag}.png")
+    outpath = os.path.join(OUT, f"mode_{tag}.png")
     cv2.imwrite(outpath, result["visualization"])
     print(f"[CMP] {tag}: {n} detections in {dt:.1f}s -> {outpath}")
-    # Print class breakdown if VLM ran
-    classes = {}
-    for d in result["detections"]:
-        cl = d.get("vlm_class")
-        if cl:
-            classes[cl] = classes.get(cl, 0) + 1
-    if classes:
-        print(f"[CMP] {tag} vlm_class kept: {classes}")
     return n
 
 
 def main():
-    if not os.path.exists(DRAWING):
-        print(f"MISSING drawing: {DRAWING}")
-        return
-    n_off = run(False, "vlm_off")
-    n_on = run(True, "vlm_on")
+    if not os.path.exists(DRAWING) or not os.path.exists(PATTERN):
+        print("MISSING input files"); return
+    n_white = run(False, "whitelist")
+    n_reject = run(True, "rejectonly")
     print(f"\n========== RESULT ==========")
-    print(f"  VLM off: {n_off} detections")
-    print(f"  VLM on : {n_on} detections")
-    print(f"  removed by VLM: {n_off - n_on}")
+    print(f"  whitelist   : {n_white}")
+    print(f"  reject-only : {n_reject}")
+    print(f"  recall delta: +{n_reject - n_white}")
 
 
 if __name__ == "__main__":
