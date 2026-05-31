@@ -1,5 +1,11 @@
-"""Compare DINODense ON vs OFF on the 6 real drawings using the resistor
-(simple) template — this is the path where DINODense Pass C actually activates.
+"""Evaluate the pipeline on the 6 assessment drawings.
+
+Template pairings (established in session 5):
+  Drawing 1 (resistor circuit)    + test_pattern_d1_2.png  -> baseline 10 dets
+  Drawing 4 (bridge rectifier)    + test_pattern_d1.png    -> baseline  4 dets
+  Drawings 2,3,5,6                + test_pattern_d1_2.png  -> expected  0 dets
+
+DINODense Pass C was shown to be dormant (ON==OFF everywhere) in session 6.
 """
 import sys
 import os
@@ -10,39 +16,46 @@ from src.pipeline import PatternDetectionPipeline  # noqa: E402
 
 DRAWINGS_DIR = r"D:\Sotatek_Assessment\drawings"
 
+# Primary evaluation: resistor template vs all 6 drawings
+RESISTOR_PAT = os.path.join(DRAWINGS_DIR, "test_pattern_d1_2.png")
+# Secondary: bridge rectifier template vs drawing 4
+BRIDGE_PAT = os.path.join(DRAWINGS_DIR, "test_pattern_d1.png")
+
+BASELINES = {
+    ("resistor", "1.png"): 10,
+    ("resistor", "4.png"): None,   # not expected
+    ("bridge",   "4.png"): 4,
+}
+
 
 def main():
-    pattern = os.path.join(DRAWINGS_DIR, "test_2.png")  # resistor simple template
-    drawings = [os.path.join(DRAWINGS_DIR, f"{i}.png") for i in range(1, 7)]
-
-    if not os.path.exists(pattern):
-        print(f"MISSING pattern: {pattern}")
-        return
-
+    pipe = PatternDetectionPipeline()
     summary = {}
-    for mode_name, flag in [("dense_ON", True), ("dense_OFF", False)]:
-        print(f"\n########## MODE: {mode_name} ##########")
-        pipe = PatternDetectionPipeline(config={"use_dino_dense": flag})
-        for dpath in drawings:
-            name = os.path.basename(dpath)
-            if not os.path.exists(dpath):
-                print(f"SKIP {name}")
-                continue
-            try:
-                result = pipe.detect_auto(pattern, dpath, return_visualization=False)
-                n = result.get("total_detections")
-            except Exception as e:
-                n = f"ERR:{e}"
-            summary[(mode_name, name)] = n
-            print(f"  {name}: {n}")
 
-    print("\n========== SUMMARY (resistor template) ==========")
+    print("\n===== Resistor template (test_pattern_d1_2.png) =====")
     for i in range(1, 7):
-        name = f"{i}.png"
-        on = summary.get(("dense_ON", name))
-        off = summary.get(("dense_OFF", name))
-        flag = "  <-- DIFF" if on != off else ""
-        print(f"  {name}:  ON={on}  OFF={off}{flag}")
+        dpath = os.path.join(DRAWINGS_DIR, f"{i}.png")
+        if not os.path.exists(dpath):
+            print(f"  SKIP {i}.png (not found)")
+            continue
+        r = pipe.detect_auto(RESISTOR_PAT, dpath, return_visualization=False)
+        n = r["total_detections"]
+        summary[("resistor", f"{i}.png")] = n
+        base = BASELINES.get(("resistor", f"{i}.png"))
+        tag = f"  (baseline {base})" if base is not None else ""
+        print(f"  {i}.png: {n}{tag}")
+
+    print("\n===== Bridge-rectifier template (test_pattern_d1.png) vs drawing 4 =====")
+    dpath = os.path.join(DRAWINGS_DIR, "4.png")
+    r = pipe.detect_auto(BRIDGE_PAT, dpath, return_visualization=False)
+    n = r["total_detections"]
+    print(f"  4.png: {n}  (baseline 4)")
+
+    print("\n===== SUMMARY =====")
+    for i in range(1, 7):
+        k = ("resistor", f"{i}.png")
+        if k in summary:
+            print(f"  resistor + {i}.png: {summary[k]}")
 
 
 if __name__ == "__main__":
