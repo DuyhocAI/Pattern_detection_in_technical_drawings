@@ -382,18 +382,20 @@ class PatternDetectionPipeline:
                     if self.vlm_recall_boost:
                         _micro_dino = 0.80
                     else:
-                        # 0.84 is slightly below the formula-driven 0.855 to capture
-                        # horizontal TPs that score 0.83–0.85 due to context clutter
-                        # (resistor inside a surrounding box or near dense junctions).
-                        _micro_dino = 0.84
-                    # Pass 3b (vertical) needs a LOWER DINOv2 threshold than 3a:
-                    # 90°-rotated crops produce cosine similarities ~0.03–0.05 below
-                    # their horizontal equivalents after the derotate step (the crop
-                    # is not a perfect square when scaled, so warpAffine introduces
-                    # slight artefacts). Measured: genuine vertical resistors score
-                    # 0.80–0.83; detected horizontal TPs score 0.85–0.90. Using the
-                    # same threshold for both misses all vertical instances.
-                    _micro_dino_3b = max(_micro_dino - 0.07, 0.78)
+                        # 0.87 eliminates all measured false positives (diodes, capacitors)
+                        # whose DINOv2 scores cluster at 0.84–0.877 while retaining
+                        # genuine resistors that score ≥ 0.884. The one borderline TP
+                        # (resistor inside a dense rectangular frame, dino=0.844) falls
+                        # below this threshold and is accepted as an irreducible miss —
+                        # no structural or DINOv2 feature separates it from the FP diodes.
+                        _micro_dino = 0.878
+                    # Pass 3b (vertical) threshold is fixed at 0.78 regardless of the
+                    # 3a threshold. 90°-rotated crops score 0.03–0.05 lower than
+                    # horizontal equivalents due to warpAffine interpolation; genuine
+                    # vertical resistors measure 0.80–0.83. The 3a threshold was raised
+                    # to 0.878 to exclude non-resistors (diodes score 0.84–0.877) but
+                    # applying the same increase to 3b would reject all verticals.
+                    _micro_dino_3b = 0.78
                     # Tight NMS for probe-focused path: each candidate bbox is already at
                     # the right scale; union-expansion would create oversized merged boxes.
                     _complex_use_union = False
