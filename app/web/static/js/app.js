@@ -337,50 +337,50 @@ document.addEventListener('click', async (e) => {
 });
 
 // ---- Page navigation ----
-document.addEventListener('DOMContentLoaded', () => {
-  const navItems = document.querySelectorAll('.nav-item');
-  console.log('[App] Found nav items:', navItems.length);
+const navItems = document.querySelectorAll('.nav-item');
 
-  function switchPage(pageName) {
-    console.log('[App] Switching to page:', pageName);
+function switchPage(pageName) {
+  console.log('[Page Navigation] Switching to:', pageName);
 
-    const uploadSection = document.querySelector('.upload-section');
-    const aboutPage = document.getElementById('aboutPage');
-    const topbar = document.querySelector('.topbar');
-    const statsRow = document.getElementById('statsRow');
-    const resultsSection = document.getElementById('resultsSection');
+  const uploadSection = document.querySelector('.upload-section');
+  const aboutPage = document.getElementById('aboutPage');
+  const topbar = document.querySelector('.topbar');
+  const statsRow = document.getElementById('statsRow');
+  const resultsSection = document.getElementById('resultsSection');
 
-    // Update active nav
-    navItems.forEach(item => item.classList.remove('active'));
-    document.querySelector(`[data-page="${pageName}"]`).classList.add('active');
+  // Update active nav
+  navItems.forEach(item => item.classList.remove('active'));
+  const activeItem = document.querySelector(`[data-page="${pageName}"]`);
+  if (activeItem) activeItem.classList.add('active');
 
-    // Hide all pages first
-    if (uploadSection) uploadSection.style.display = 'none';
-    if (aboutPage) aboutPage.style.display = 'none';
-    if (topbar) topbar.style.display = 'none';
-    if (statsRow) statsRow.style.display = 'none';
-    if (resultsSection) resultsSection.style.display = 'none';
+  // Hide all sections
+  if (uploadSection) uploadSection.style.display = 'none';
+  if (topbar) topbar.style.display = 'none';
+  if (statsRow) statsRow.style.display = 'none';
+  if (resultsSection) resultsSection.style.display = 'none';
+  if (aboutPage) aboutPage.style.display = 'none';
 
-    // Show selected page
-    if (pageName === 'detect') {
-      if (uploadSection) uploadSection.style.display = 'block';
-      if (topbar) topbar.style.display = 'flex';
-    } else if (pageName === 'about') {
-      if (aboutPage) aboutPage.style.display = 'block';
-    }
+  // Show selected section
+  if (pageName === 'detect') {
+    if (uploadSection) uploadSection.style.display = 'block';
+    if (topbar) topbar.style.display = 'flex';
+  } else if (pageName === 'about') {
+    if (aboutPage) aboutPage.style.display = 'block';
+    window.scrollTo(0, 0);
   }
+}
 
-  navItems.forEach(item => {
-    item.addEventListener('click', (e) => {
-      e.preventDefault();
-      const page = item.dataset.page;
-      console.log('[App] Nav item clicked:', page);
-      switchPage(page);
-    });
+// Attach click handlers
+navItems.forEach(item => {
+  item.addEventListener('click', function(e) {
+    e.preventDefault();
+    const page = this.dataset.page;
+    console.log('[Page Navigation] Clicked:', page);
+    switchPage(page);
   });
-
-  console.log('[App] Navigation initialized');
 });
+
+console.log('[Page Navigation] Initialized with', navItems.length, 'nav items');
 
 // ---- Initial status check ----
 (async () => {
