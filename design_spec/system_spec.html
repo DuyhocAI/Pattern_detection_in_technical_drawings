@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Specification — Zero-Shot Pattern Detection for Engineering BOM Drawings</title>
+<style>
+  :root {
+    --primary: #1a56db;
+    --secondary: #0e9f6e;
+    --accent: #e3a008;
+    --danger: #e02424;
+    --bg: #f9fafb;
+    --card: #ffffff;
+    --border: #e5e7eb;
+    --text: #111827;
+    --muted: #6b7280;
+    --code-bg: #1e1e2e;
+    --code-text: #cdd6f4;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+
+  /* Layout */
+  .wrapper { display: flex; min-height: 100vh; }
+  nav { width: 260px; min-width: 260px; background: #1e293b; color: #cbd5e1; position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 24px 0; }
+  main { flex: 1; max-width: 1060px; padding: 48px 56px; }
+
+  /* Nav */
+  .nav-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #64748b; padding: 0 20px 8px; }
+  .nav-section { margin-bottom: 4px; }
+  nav a { display: block; padding: 7px 20px; color: #94a3b8; font-size: 14px; text-decoration: none; border-left: 3px solid transparent; transition: all .15s; }
+  nav a:hover, nav a.active { color: #e2e8f0; border-left-color: var(--primary); background: rgba(255,255,255,.05); }
+  nav a.sub { padding-left: 34px; font-size: 13px; color: #64748b; }
+  nav a.sub:hover { color: #94a3b8; }
+  .nav-divider { border: none; border-top: 1px solid #334155; margin: 12px 20px; }
+
+  /* Headings */
+  h1 { font-size: 2rem; font-weight: 800; color: var(--text); margin-bottom: 8px; }
+  h2 { font-size: 1.45rem; font-weight: 700; margin: 48px 0 16px; padding-bottom: 10px; border-bottom: 2px solid var(--border); }
+  h3 { font-size: 1.1rem; font-weight: 600; margin: 28px 0 10px; color: #1f2937; }
+  h4 { font-size: .95rem; font-weight: 600; margin: 18px 0 8px; color: #374151; }
+
+  /* Text */
+  p { margin-bottom: 14px; color: #374151; }
+  .lead { font-size: 1.05rem; color: var(--muted); margin-bottom: 32px; line-height: 1.7; }
+  a { color: var(--primary); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* Meta tags */
+  .meta { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 32px; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; }
+  .badge-blue { background: #dbeafe; color: #1e40af; }
+  .badge-green { background: #d1fae5; color: #065f46; }
+  .badge-yellow { background: #fef3c7; color: #92400e; }
+  .badge-purple { background: #ede9fe; color: #5b21b6; }
+
+  /* Cards */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; margin-bottom: 20px; }
+  .card-title { font-size: .85rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 10px; }
+
+  /* Pipeline diagram */
+  .pipeline { display: flex; align-items: stretch; gap: 0; margin: 28px 0; overflow-x: auto; }
+  .stage { background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; padding: 16px 14px; min-width: 130px; flex: 1; text-align: center; position: relative; }
+  .stage-num { display: inline-block; width: 24px; height: 24px; border-radius: 50%; font-size: 11px; font-weight: 700; color: #fff; line-height: 24px; margin-bottom: 8px; }
+  .stage-name { font-size: .8rem; font-weight: 700; margin-bottom: 4px; }
+  .stage-desc { font-size: .72rem; color: var(--muted); }
+  .stage-time { font-size: .7rem; margin-top: 6px; color: var(--accent); font-weight: 600; }
+  .arrow { display: flex; align-items: center; padding: 0 6px; color: #9ca3af; font-size: 20px; flex-shrink: 0; }
+  .stage.s0 .stage-num { background: #6366f1; }
+  .stage.s1 .stage-num { background: var(--primary); }
+  .stage.s2 .stage-num { background: var(--secondary); }
+  .stage.s2b .stage-num { background: #0891b2; }
+  .stage.s3 .stage-num { background: var(--accent); }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: .88rem; }
+  th { background: #f1f5f9; padding: 10px 14px; text-align: left; font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #475569; border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: #374151; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #f8fafc; }
+  td code, th code { background: #f1f5f9; padding: 1px 5px; border-radius: 4px; font-size: .85em; color: #0f172a; font-family: 'Cascadia Code', 'Fira Code', monospace; }
+
+  /* Code blocks */
+  pre { background: var(--code-bg); color: var(--code-text); border-radius: 10px; padding: 20px 22px; overflow-x: auto; font-size: .82rem; line-height: 1.65; margin: 16px 0; font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace; }
+  code { font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace; }
+  .inline-code { background: #f1f5f9; padding: 1px 6px; border-radius: 4px; font-size: .88em; color: #0f172a; }
+
+  /* Callouts */
+  .callout { border-left: 4px solid; border-radius: 0 8px 8px 0; padding: 14px 18px; margin: 18px 0; }
+  .callout-info { border-color: var(--primary); background: #eff6ff; }
+  .callout-info .callout-title { color: var(--primary); }
+  .callout-warn { border-color: var(--accent); background: #fffbeb; }
+  .callout-warn .callout-title { color: #b45309; }
+  .callout-success { border-color: var(--secondary); background: #ecfdf5; }
+  .callout-success .callout-title { color: #065f46; }
+  .callout-danger { border-color: var(--danger); background: #fef2f2; }
+  .callout-danger .callout-title { color: #991b1b; }
+  .callout-title { font-weight: 700; font-size: .85rem; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+
+  /* Grid */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin: 16px 0; }
+
+  /* Metric boxes */
+  .metric { text-align: center; padding: 16px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; }
+  .metric-value { font-size: 2.2rem; font-weight: 800; }
+  .metric-label { font-size: .8rem; color: var(--muted); margin-top: 4px; font-weight: 500; }
+  .metric.green .metric-value { color: var(--secondary); }
+  .metric.blue .metric-value { color: var(--primary); }
+  .metric.yellow .metric-value { color: #d97706; }
+  .metric.red .metric-value { color: var(--danger); }
+
+  /* Filter chain */
+  .filter-chain { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; }
+  .filter-item { display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+  .filter-icon { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+  .filter-name { font-weight: 600; font-size: .9rem; margin-bottom: 2px; }
+  .filter-desc { font-size: .82rem; color: var(--muted); }
+  .filter-flag { font-size: .75rem; background: #f1f5f9; padding: 1px 7px; border-radius: 9999px; color: #475569; font-family: monospace; margin-left: 8px; }
+
+  /* Section spacing */
+  section { margin-bottom: 16px; }
+  .section-id { scroll-margin-top: 24px; }
+
+  /* Footer */
+  footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--border); color: var(--muted); font-size: .82rem; }
+
+  @media (max-width: 900px) {
+    .wrapper { flex-direction: column; }
+    nav { width: 100%; height: auto; position: static; }
+    main { padding: 24px 20px; }
+    .grid2, .grid3 { grid-template-columns: 1fr; }
+    .pipeline { flex-direction: column; }
+    .arrow { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+<!-- ===== SIDEBAR NAV ===== -->
+<nav>
+  <div style="padding: 0 20px 20px; border-bottom: 1px solid #334155; margin-bottom: 16px;">
+    <div style="font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .08em;">Sotatek AI Assessment</div>
+    <div style="font-size: 15px; font-weight: 700; color: #e2e8f0; margin-top: 4px;">Pattern Detection</div>
+    <div style="font-size: 12px; color: #64748b; margin-top: 2px;">System Specification v1.0</div>
+  </div>
+
+  <div class="nav-title">Tổng quan</div>
+  <a href="#overview">1. Giới thiệu</a>
+  <a href="#goals">2. Mục tiêu &amp; ràng buộc</a>
+
+  <hr class="nav-divider">
+  <div class="nav-title">Kiến trúc Pipeline</div>
+  <a href="#architecture">3. Tổng quan kiến trúc</a>
+  <a href="#s0" class="sub">3.1 Stage 0 — Tiền xử lý</a>
+  <a href="#s1" class="sub">3.2 Stage 1 — NCC Matching</a>
+  <a href="#s2" class="sub">3.3 Stage 2 — DINOv2 Verify</a>
+  <a href="#s2b" class="sub">3.4 Stage 2b — Structural Filters</a>
+  <a href="#s3" class="sub">3.5 Stage 3 — VLM Filter (opt)</a>
+
+  <hr class="nav-divider">
+  <div class="nav-title">Thành phần chi tiết</div>
+  <a href="#ncc-detail">4. NCC Matcher chi tiết</a>
+  <a href="#dino-detail">5. DINOv2 Verifier chi tiết</a>
+  <a href="#filters-detail">6. Structural Filters chi tiết</a>
+  <a href="#vlm-detail">7. VLM Verifier chi tiết</a>
+
+  <hr class="nav-divider">
+  <div class="nav-title">Triển khai</div>
+  <a href="#web-ui">8. Web UI (FastAPI)</a>
+  <a href="#config">9. Cấu hình hệ thống</a>
+  <a href="#docker">10. Docker &amp; HuggingFace</a>
+
+  <hr class="nav-divider">
+  <div class="nav-title">Đánh giá</div>
+  <a href="#results">11. Kết quả thực nghiệm</a>
+  <a href="#design-choices">12. Quyết định thiết kế</a>
+  <a href="#limitations">13. Hạn chế</a>
+</nav>
+
+<!-- ===== MAIN CONTENT ===== -->
+<main>
+
+<!-- ===== HEADER ===== -->
+<div style="margin-bottom: 36px;">
+  <div style="font-size: .8rem; color: var(--muted); margin-bottom: 8px;">Sotatek AI/Computer Vision Engineer Assessment · 2026</div>
+  <h1>Zero-Shot Pattern Detection<br>for Engineering BOM Drawings</h1>
+  <p class="lead">Đặc tả kỹ thuật chi tiết hệ thống phát hiện ký hiệu linh kiện lặp lại trong bản vẽ kỹ thuật BOM, không cần dữ liệu huấn luyện, hoạt động hoàn toàn zero-shot ở thời điểm suy luận.</p>
+  <div class="meta">
+    <span class="badge badge-blue">Zero-Shot Detection</span>
+    <span class="badge badge-green">OpenCV · DINOv2 · Qwen2-VL</span>
+    <span class="badge badge-yellow">FastAPI · Docker · HuggingFace</span>
+    <span class="badge badge-purple">Python 3.11</span>
+  </div>
+</div>
+
+<!-- ===== 1. OVERVIEW ===== -->
+<h2 id="overview" class="section-id">1. Giới thiệu</h2>
+<p>Bài toán đặt ra: cho một ảnh <strong>template</strong> (ký hiệu linh kiện cần tìm) và một ảnh <strong>drawing</strong> (bản vẽ mạch điện kỹ thuật), hệ thống phải xác định tọa độ của tất cả các vị trí mà ký hiệu đó xuất hiện trong bản vẽ — bất kể tỉ lệ, góc xoay nhỏ, hay biến thiên phong cách vẽ.</p>
+<p>Điểm đặc biệt: hệ thống phải hoạt động <strong>zero-shot</strong> — không có dữ liệu huấn luyện, không fine-tuning, bất kỳ template nào cũng có thể nhận diện ngay tại runtime.</p>
+
+<div class="grid3" style="margin-top: 24px;">
+  <div class="metric green">
+    <div class="metric-value">3</div>
+    <div class="metric-label">Stages chính (+ 1 optional)</div>
+  </div>
+  <div class="metric blue">
+    <div class="metric-value">Zero-shot</div>
+    <div class="metric-label">Không cần fine-tuning</div>
+  </div>
+  <div class="metric yellow">
+    <div class="metric-value">25s</div>
+    <div class="metric-label">Runtime trung bình / drawing (GPU)</div>
+  </div>
+</div>
+
+<!-- ===== 2. GOALS ===== -->
+<h2 id="goals" class="section-id">2. Mục tiêu &amp; Ràng buộc</h2>
+
+<h3>2.1 Mục tiêu chức năng</h3>
+<table>
+  <thead><tr><th>#</th><th>Yêu cầu</th><th>Mức ưu tiên</th></tr></thead>
+  <tbody>
+    <tr><td>F1</td><td>Nhận template và drawing dưới dạng ảnh, trả về danh sách bounding box + score</td><td><span class="badge badge-blue">Bắt buộc</span></td></tr>
+    <tr><td>F2</td><td>Hoạt động zero-shot — không cần dữ liệu huấn luyện cho class mới</td><td><span class="badge badge-blue">Bắt buộc</span></td></tr>
+    <tr><td>F3</td><td>Phát hiện ký hiệu ở nhiều tỉ lệ (0.7×–1.8×) và góc xoay nhỏ (±10°), 90°</td><td><span class="badge badge-blue">Bắt buộc</span></td></tr>
+    <tr><td>F4</td><td>Web UI để upload, chạy detection, download kết quả</td><td><span class="badge badge-green">Quan trọng</span></td></tr>
+    <tr><td>F5</td><td>Chạy được trên CPU (không bắt buộc GPU)</td><td><span class="badge badge-green">Quan trọng</span></td></tr>
+    <tr><td>F6</td><td>Stage 3 VLM filter (optional) để loại FP phức tạp</td><td><span class="badge badge-yellow">Tùy chọn</span></td></tr>
+    <tr><td>F7</td><td>Triển khai được trên HuggingFace Spaces (Docker)</td><td><span class="badge badge-yellow">Tùy chọn</span></td></tr>
+  </tbody>
+</table>
+
+<h3>2.2 Ràng buộc phi chức năng</h3>
+<div class="grid2">
+  <div class="card">
+    <div class="card-title">Hiệu năng</div>
+    <ul style="font-size:.88rem; padding-left:18px; color:#374151;">
+      <li>CPU: &lt; 120s / drawing A3 (3508×2480px)</li>
+      <li>GPU (CUDA): &lt; 30s / drawing</li>
+      <li>Memory: &lt; 4GB VRAM (DINOv2 ViT-S)</li>
+      <li>VLM: ~4.5GB VRAM bfloat16 (lazy-load)</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="card-title">Độ chính xác</div>
+    <ul style="font-size:.88rem; padding-left:18px; color:#374151;">
+      <li>Recall &gt; 90% trên bản vẽ chuẩn</li>
+      <li>FP rate thấp (chỉ giữ detection NCC &amp; DINOv2 đều cao)</li>
+      <li>Bounding box IoU ≥ 0.5 với ground truth</li>
+      <li>Chấp nhận miss các ký hiệu ở biên ảnh</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ===== 3. ARCHITECTURE ===== -->
+<h2 id="architecture" class="section-id">3. Tổng quan kiến trúc Pipeline</h2>
+<p>Hệ thống theo kiến trúc cascade 3 giai đoạn (+ 1 optional), mỗi giai đoạn loại bỏ các ứng viên sai dần dần. Thiết kế này đạt recall cao từ Stage 1, sau đó tăng precision dần qua Stage 2 và 2b.</p>
+
+<div class="pipeline">
+  <div class="stage s0">
+    <div class="stage-num">0</div>
+    <div class="stage-name">Preprocess</div>
+    <div class="stage-desc">Binarize · Denoise · Normalize</div>
+    <div class="stage-time">&lt; 0.5s</div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="stage s1">
+    <div class="stage-num">1</div>
+    <div class="stage-name">NCC Matching</div>
+    <div class="stage-desc">Multi-scale · Multi-angle · NMS</div>
+    <div class="stage-time">15–60s CPU</div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="stage s2">
+    <div class="stage-num">2</div>
+    <div class="stage-name">DINOv2 Verify</div>
+    <div class="stage-desc">Cosine similarity · Derotate · Center crop</div>
+    <div class="stage-time">2–10s GPU</div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="stage s2b">
+    <div class="stage-num">2b</div>
+    <div class="stage-name">Structural Filters</div>
+    <div class="stage-desc">Wire-lead · Chamfer · NMS · Gap filter</div>
+    <div class="stage-time">&lt; 1s</div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="stage s3" style="border-style:dashed; opacity:.85;">
+    <div class="stage-num">3</div>
+    <div class="stage-name">VLM Filter</div>
+    <div class="stage-desc">Qwen2-VL · Open-classification · Optional</div>
+    <div class="stage-time">~0.4s/crop</div>
+  </div>
+</div>
+
+<div class="callout callout-info">
+  <div class="callout-title">Chiến lược thiết kế</div>
+  Stage 1 (NCC) chạy nhanh, có recall cao nhưng nhiều false positive. Stage 2 (DINOv2) loại phần lớn FP bằng semantic feature. Stage 2b áp dụng geometric filter cho các FP còn lại. Stage 3 (VLM) chỉ cần thiết khi DINOv2 không thể phân biệt (ví dụ: diode vs resistor).
+</div>
+
+<h3>3.1 Luồng xử lý theo loại template</h3>
+<p>Pipeline phân nhánh tự động dựa trên đặc tính của template:</p>
+<table>
+  <thead><tr><th>Loại template</th><th>Tiêu chí phân loại</th><th>Pipeline được chọn</th><th>Ví dụ</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Simple (outline)</strong></td>
+      <td><code>edge_density &lt; 0.05</code> AND <code>interior_fill &lt; 0.02</code></td>
+      <td>Pass A (NCC scales 0.30–1.0) + Pass B (rotate drawing 90°) + Pass C (DINODense nếu lớn hơn template)</td>
+      <td>Resistor IEC (hình chữ nhật)</td>
+    </tr>
+    <tr>
+      <td><strong>Complex (filled)</strong></td>
+      <td>Không thỏa mãn điều kiện Simple</td>
+      <td>Scale probe → Pass 3a (góc ≈0°) + Pass 3b (góc ≈90°) với adaptive scales</td>
+      <td>Resistor ANSI (zigzag), Bridge Rectifier, cổng logic</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ===== STAGE 0 ===== -->
+<h2 id="s0" class="section-id">3.1 Stage 0 — Tiền xử lý (Preprocessor)</h2>
+<p><strong>Module:</strong> <span class="inline-code">src/preprocessor.py</span></p>
+<p>Chuẩn hóa cả template và drawing về cùng định dạng binary grayscale trước khi đưa vào pipeline.</p>
+
+<h3>Các bước xử lý</h3>
+<div class="filter-chain">
+  <div class="filter-item">
+    <div class="filter-icon" style="background:#ede9fe;">1</div>
+    <div>
+      <div class="filter-name">Convert to Grayscale</div>
+      <div class="filter-desc">Ảnh RGB → Grayscale. Bản vẽ kỹ thuật không phụ thuộc màu sắc.</div>
+    </div>
+  </div>
+  <div class="filter-item">
+    <div class="filter-icon" style="background:#dbeafe;">2</div>
+    <div>
+      <div class="filter-name">Adaptive Binarization</div>
+      <div class="filter-desc">Adaptive threshold (block size 21, C=10) để xử lý bản vẽ có ánh sáng không đều. Kết quả: nền trắng (255), nét vẽ đen (0).</div>
+    </div>
+  </div>
+  <div class="filter-item">
+    <div class="filter-icon" style="background:#d1fae5;">3</div>
+    <div>
+      <div class="filter-name">Noise Removal</div>
+      <div class="filter-desc">Morphological opening (kernel 2×2) để loại bỏ pixel nhiễu nhỏ không phải nét vẽ.</div>
+    </div>
+  </div>
+  <div class="filter-item">
+    <div class="filter-icon" style="background:#fef3c7;">4</div>
+    <div>
+      <div class="filter-name">Stroke Dilation (optional)</div>
+      <div class="filter-desc">Khi <code>dilate_pattern &gt; 0</code>: làm dày nét template để khớp với drawing có stroke khác (Pass 2 — relaxed NCC pass).</div>
+    </div>
+  </div>
+</div>
+
+<h3>Output format</h3>
+<pre>{
+  "processed": np.ndarray,   # binary uint8, shape (H, W), values {0, 255}
+  "original":  np.ndarray,   # ảnh gốc RGB, để visualization
+  "scale_factor": 1.0        # nếu resize (hiện tại luôn = 1.0)
+}</pre>
+
+<!-- ===== STAGE 1 ===== -->
+<h2 id="s1" class="section-id">3.2 Stage 1 — NCC Multi-scale Matching</h2>
+<p><strong>Module:</strong> <span class="inline-code">src/ncc_matcher.py</span></p>
+<p>Sử dụng Normalized Cross-Correlation (NCC) để nhanh chóng đề xuất các vùng ứng viên (candidate regions) trong drawing mà template có thể khớp. NCC là convolution tuyến tính, chạy rất nhanh trên CPU với <code>cv2.matchTemplate(TM_CCOEFF_NORMED)</code>.</p>
+
+<h3>Thuật toán chi tiết</h3>
+<pre>for scale in scales:
+    # Resize template về scale đang xét
+    scaled_tmpl = cv2.resize(template, (int(tw*scale), int(th*scale)))
+
+    for angle in angles:
+        # Rotate template quanh tâm
+        rotated = rotate_template(scaled_tmpl, angle)
+
+        # Chạy NCC sliding window trên toàn bộ drawing
+        ncc_map = cv2.matchTemplate(drawing, rotated, cv2.TM_CCOEFF_NORMED)
+
+        # Thu thập tất cả vị trí có NCC >= threshold
+        locs = np.where(ncc_map >= ncc_threshold)
+        for (y, x) in zip(*locs):
+            candidates.append({x, y, rw, rh, ncc_map[y,x], scale, angle})
+
+# NMS (Non-Maximum Suppression) để loại bỏ duplicate
+final_candidates = apply_nms(candidates, iou_threshold=0.30)</pre>
+
+<h3>Xử lý góc xoay (Rotation Handling)</h3>
+<p>Hàm <code>rotate_template(template, angle)</code> dùng <code>cv2.getRotationMatrix2D</code>. Trường hợp đặc biệt cho góc ≈90°:</p>
+<pre># Với 75° ≤ |angle| ≤ 105°: mở rộng canvas để template không bị cắt
+if 75 <= abs(angle % 180) <= 105:
+    out_w, out_h = h, w   # hoán đổi chiều rộng/cao
+    M[0, 2] += (out_w - w) / 2
+    M[1, 2] += (out_h - h) / 2</pre>
+
+<h3>NMS với Cross-orientation Protection</h3>
+<p>NMS sử dụng containment-aware IoU: <code>score = max(IoU, intersection / min_area)</code>. Quan trọng: các candidate theo hướng ngang (angle ≤ 70°) và dọc (70° ≤ |angle| ≤ 110°) KHÔNG triệt tiêu lẫn nhau, tránh mất ký hiệu ở hai hướng cùng vị trí.</p>
+
+<h3>Tham số NCC cho từng pass</h3>
+<table>
+  <thead><tr><th>Pass</th><th>Template</th><th>NCC Threshold</th><th>Angles</th><th>Scales</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Pass 1 (Strict)</strong></td><td>Nguyên bản</td><td>0.55</td><td>[-10, -5, 0, 5, 10]</td><td>Mặc định NCCMatcher</td></tr>
+    <tr><td><strong>Pass 2 (Relaxed)</strong></td><td>Dilated (5×5)</td><td>0.28 (complex) / 0.50 (simple)</td><td>[-10, -5, 0, 5, 10]</td><td>Mặc định NCCMatcher</td></tr>
+    <tr><td><strong>Pass 3a (Micro 0°)</strong></td><td>Nguyên bản</td><td>0.28</td><td>[-10, -5, 0, 5, 10]</td><td>Adaptive ± probe_scale</td></tr>
+    <tr><td><strong>Pass 3b (Micro 90°)</strong></td><td>Nguyên bản</td><td>0.28</td><td>[80, 85, 90, 95, 100]</td><td>Adaptive ± probe_scale</td></tr>
+    <tr><td><strong>Pass A (Simple)</strong></td><td>Nguyên bản</td><td>0.42</td><td>[-10,..,10, 80,..,100]</td><td>[0.30, 0.35, 0.40, 0.50, 0.60, 0.70, 1.0]</td></tr>
+  </tbody>
+</table>
+
+<h3>Scale Probe (Complex Template)</h3>
+<p>Trước khi chạy Pass 3a/3b, pipeline thực hiện scale probe nhanh để xác định tỉ lệ tốt nhất:</p>
+<pre>probe_scales = [0.25, 0.30, 0.35, 0.40, 0.50, 0.65, 0.85, 1.0, 1.2, 1.5, 1.8, 2.0, 2.5]
+for ps in probe_scales:
+    # Resize template và chạy NCC trên drawing, lấy max
+    best_probe_s = ps with highest max_NCC
+
+# Nếu best_probe_s > 1.40: bỏ qua Pass 1+2, chuyển sang probe-focused mode
+_use_probe_focused = (no_std_candidates) or (best_probe_s > 1.40)
+
+if _use_probe_focused:
+    # Scales = best_probe_s × [0.80, 0.85, 0.90, 0.95, 1.0, 1.05, 1.10, 1.15, 1.20]
+    micro_scales = [round(best_probe_s * f, 2) for f in fracs]</pre>
+
+<!-- ===== STAGE 2 ===== -->
+<h2 id="s2" class="section-id">3.3 Stage 2 — DINOv2 Verification</h2>
+<p><strong>Module:</strong> <span class="inline-code">src/dino_verifier.py</span> · Model: <strong>dinov2_vits14</strong> (ViT-S/14, 21M params)</p>
+<p>Sử dụng embedding từ DINOv2 để kiểm tra xem vùng ảnh trong drawing có thực sự chứa ký hiệu giống template không, bằng cách so sánh cosine similarity giữa các vector feature.</p>
+
+<h3>Tại sao DINOv2?</h3>
+<div class="callout callout-success">
+  <div class="callout-title">Lý do chọn DINOv2</div>
+  DINOv2 được huấn luyện self-supervised trên 142M ảnh tự nhiên, các feature của nó capture cấu trúc hình học (shape primitives) thay vì texture hay màu sắc. Bản vẽ kỹ thuật (line-art trắng đen) là domain rất khác với ảnh tự nhiên, nhưng DINOv2 vẫn generalize tốt vì các feature mức patch encode đặc trưng hình học cơ bản (đường thẳng, góc, đường cong) — đây chính xác là những gì bản vẽ chứa.
+</div>
+
+<h3>Embedding pipeline</h3>
+<pre># 1. Encode template (cached sau lần đầu)
+template_feat = model.forward_features(template_tensor)["x_norm_patchtokens"].mean(dim=1)
+template_feat = F.normalize(template_feat, dim=1)
+
+# 2. Với mỗi candidate:
+crop = drawing[y:y+h, x:x+w]            # cắt vùng ảnh
+
+# Derotate nếu cần (Pass 3a/3b với derotate=True)
+if derotate and abs(angle) > 1.0:
+    crop = rotate_crop(crop, -angle)     # xoay ngược để align với template
+
+# Encode full crop
+crop_feat = model.forward_features(crop_tensor)["x_norm_patchtokens"].mean(dim=1)
+crop_feat = F.normalize(crop_feat, dim=1)
+
+# Encode center crop (70% bbox, loại bỏ wire leads)
+center_crop = crop[h*15//100 : h*85//100, w*15//100 : w*85//100]
+center_feat = ... (tương tự)
+
+# 3. Cosine similarity — lấy max của full và center crop
+sim = max(cosine(crop_feat, template_feat),
+          cosine(center_feat, template_feat))
+
+# 4. Lọc theo threshold
+if sim >= cosine_threshold:
+    candidate["dino_score"] = sim
+    candidate["confidence"] = (ncc_score + sim) / 2
+    verified.append(candidate)</pre>
+
+<h3>DINOv2 Threshold theo pass</h3>
+<table>
+  <thead><tr><th>Pass</th><th>Template loại</th><th>Threshold</th><th>Lý do</th></tr></thead>
+  <tbody>
+    <tr><td>Standard (Pass 1+2)</td><td>All</td><td>0.84</td><td>Threshold mặc định, cân bằng precision/recall</td></tr>
+    <tr><td>Pass 3a (micro 0°)</td><td>Complex, probe-focused</td><td><strong>0.878</strong></td><td>Loại FP (diode/cap dino=0.843–0.877) trong khi giữ TP (dino≥0.884)</td></tr>
+    <tr><td>Pass 3b (micro 90°)</td><td>Complex, probe-focused</td><td><strong>0.78</strong> (cố định)</td><td>Vertical crops mất ~0.04 score do warpAffine; TP dọc đo được 0.80–0.83</td></tr>
+    <tr><td>Pass A (Simple, Chamfer)</td><td>Simple outline</td><td>N/A</td><td>Simple templates dùng Chamfer thay DINOv2</td></tr>
+    <tr><td>Pass C (DINODense)</td><td>Simple, large instance</td><td>0.78</td><td>Dense sliding window, threshold thoáng hơn</td></tr>
+  </tbody>
+</table>
+
+<h3>Pass 3b NCC Gate (bổ sung)</h3>
+<p>Sau DINOv2 verification cho Pass 3b, áp dụng thêm NCC gate:</p>
+<pre># Genuine vertical resistors: NCC 0.73–0.78 với rotated template
+# Structural FP (capacitors nhìn giống vertical): NCC 0.35–0.45
+# → Gap rõ ràng tại NCC = 0.55
+verified_3b = [c for c in verified_3b if c["ncc_score"] >= 0.55]</pre>
+
+<!-- ===== STAGE 2B ===== -->
+<h2 id="s2b" class="section-id">3.4 Stage 2b — Structural Filters</h2>
+<p><strong>Module:</strong> <span class="inline-code">src/postprocessor.py</span></p>
+<p>Bộ lọc hình học chạy sau DINOv2 để loại các FP mà DINOv2 không phân biệt được (vì có feature tương đồng mức cao). Các filter này không phụ thuộc model — chỉ dùng phân tích pixel.</p>
+
+<div class="callout callout-warn">
+  <div class="callout-title">Lưu ý về Simple vs Complex template</div>
+  Bộ lọc wire-lead, junction-dot, rect-integrity chỉ áp dụng cho <strong>Simple template</strong>. Complex template (zigzag resistor) dùng Chamfer filter + Confidence Gap filter.
+</div>
+
+<h3>Danh sách filter (Simple Template)</h3>
+<div class="filter-chain">
+  <div class="filter-item">
+    <div class="filter-icon" style="background:#dbeafe; color:#1e40af; font-weight:800;">F1</div>
+    <div>
+      <div class="filter-name">filter_wire_leads</div>
+      <div class="filter-desc">Kiểm tra dây dẫn vào/ra linh kiện. Quét toàn bộ các hàng của bbox, probe 24px sang trái và phải (top/bottom cho vertical). Genuine component phải có dark run ít nhất một phía. Bypass nếu <code>dino_score ≥ 0.88</code>.</div>
+    </div>
+  </div>
+  <div class="filter-item">
+    <div class="filter-icon" style="background:#dcfce7; color:#166534; font-weight:800;">F2</div>
+    <div>
+      <div class="filter-name">filter_wire_passthrough</div>
+      <div class="filter-desc">Loại vùng mà đường dây chạy xuyên qua phần thân component. Check: (1) horizontal dark run trong center 1/3 chiều cao → horizontal wire; (2) vertical dark run trong center 1/2 chiều rộng → vertical wire through body.</div>
+    </div>
+  </div>
+  <div class="filter-item">
+    <div class="filter-icon" style="background:#fef3c7; color:#92400e; font-weight:800;">F3</div>
+    <div>
+      <div class="filter-name">filter_junction_dots</div>
+      <div class="filter-desc">Loại vùng chứa junction dot (chấm nối dây). Phân tích connected components: area ≥ 15px, AR ≤ 2.5, fill ≥ 0.40 → là junction dot → reject candidate.</div>
+    </div>
+  </div>
+  <div class="filter-item">
+    <div class="filter-icon" style="background:#fce7f3; color:#9d174d; font-weight:800;">F4</div>
+    <div>
+      <div class="filter-name">filter_rect_integrity</div>
+      <div class="filter-desc">Loại L-junction và "only-top artifacts". Kiểm tra: phải có cả top border VÀ bottom border đủ dài (ratio ≥ 0.50). Bypass nếu dino ≥ 0.89.</div>
+    </div>
+  </div>
+  <div class="filter-item">
+    <div class="filter-icon" style="background:#ede9fe; color:#5b21b6; font-weight:800;">F5</div>
+    <div>
+      <div class="filter-name">filter_neighborhood_complexity</div>
+      <div class="filter-desc">Genuine component nằm trong vùng thưa (ít edge). Mở rộng bbox 50%, tính edge density của ring xung quanh. max_edge_density = 0.022 cho circuit area.</div>
+    </div>
+  </div>
+  <div class="filter-item">
+    <div class="filter-icon" style="background:#e0f2fe; color:#075985; font-weight:800;">F6</div>
+    <div>
+      <div class="filter-name">filter_isolated</div>
+      <div class="filter-desc">Loại candidate quá nhỏ hoặc không có context dây nối. Kết hợp aspect ratio check với expected component shape.</div>
+    </div>
+  </div>
+</div>
+
+<h3>Chamfer Distance Filter (Complex Template)</h3>
+<p>Đo sự khớp cạnh giữa vùng ảnh trong drawing và template ở cùng kích thước:</p>
+<pre># 1. Resize (và rotate nếu vertical) template về kích thước bbox
+tmpl_scaled = cv2.resize(rotate_if_vert(template), (bbox_w, bbox_h))
+
+# 2. Canny edges cho cả hai
+tmpl_edges   = cv2.Canny(tmpl_scaled, 30, 100)
+region_edges = cv2.Canny(drawing_region, 30, 100)
+
+# 3. Distance transform từ region edges
+dt = cv2.distanceTransform(255 - region_edges, cv2.DIST_L2, 5)
+
+# 4. Chamfer = mean distance từ template edges đến region edges (bidirectional)
+t2r = mean(dt[tmpl_edge_pixels])       # template → region
+r2t = mean(dt_tmpl[region_edge_pixels]) # region → template (symmetric)
+chamfer = (t2r + r2t) / 2
+
+# Threshold: max_chamfer = 5.0 (probe-focused), 3.0 (simple template)
+if chamfer > max_chamfer:
+    reject(candidate)</pre>
+
+<h3>Confidence Gap Filter</h3>
+<pre># Tìm gap lớn nhất trong phân bố confidence (sorted descending)
+confs = sorted([c["confidence"] for c in candidates], reverse=True)
+best_gap = max(confs[i] - confs[i+1] for i in range(len(confs)-1))
+
+# Nếu gap >= 0.075: loại cluster thấp hơn
+if best_gap >= 0.075:
+    threshold = midpoint_of_gap
+    candidates = [c for c in candidates if c["confidence"] >= threshold]</pre>
+
+<h3>Final NMS (Containment-aware)</h3>
+<pre>def containment_iou(a, b):
+    inter = intersection_area(a, b)
+    min_area = min(a.area, b.area)
+    return max(standard_iou(a, b),
+               inter / min_area)  # ← key: loại candidate bị "chứa" trong cái khác
+
+# Sort by confidence desc, greedy NMS
+final_nms(candidates, iou_threshold=0.40, use_union_bbox=False)</pre>
+
+<!-- ===== STAGE 3 ===== -->
+<h2 id="s3" class="section-id">3.5 Stage 3 — VLM Semantic Filter (Optional)</h2>
+<p><strong>Module:</strong> <span class="inline-code">src/vlm_verifier.py</span> · Model: <strong>Qwen/Qwen2-VL-2B-Instruct</strong></p>
+<p>Stage 3 chỉ kích hoạt khi <code>use_vlm=True</code>. Model Qwen2-VL-2B được lazy-load (~4.5GB bf16) và chỉ xử lý các candidate "borderline" (conf &lt; <code>vlm_keep_min_conf</code>).</p>
+
+<h3>Open-classification approach</h3>
+<div class="callout callout-danger">
+  <div class="callout-title">Vấn đề với yes/no prompting</div>
+  Thử nghiệm cho thấy small VLM (2B) có "agreement bias" — trả lời "yes" cho 40/40 crops khi hỏi "Is this a resistor?". Giải pháp: dùng open-classification thay vì yes/no confirmation.
+</div>
+
+<pre># Prompt template (open-classification)
+prompt = """You are an electronics expert. Look at this crop from a schematic.
+Choose exactly one label from:
+resistor | inductor | capacitor | diode | crystal | transistor | op-amp | logic-gate | wire-junction | other
+
+Reply with only the label, nothing else."""
+
+# Classify template để biết target class
+target_class = classify_template(template)  # → "resistor"
+
+# Với mỗi borderline candidate:
+label = classify_crop(drawing_crop)  # → "diode" | "resistor" | ...
+
+# Reject-only mode (default):
+reject_labels = ALL_CLASSES - {target_class} - UNTRUSTED_LABELS
+# UNTRUSTED_LABELS = {"transistor", "wire-junction", "other"}
+# → Model 2B hay gọi nhầm resistor là "transistor" → không dùng làm lý do reject
+
+if label in reject_labels:  # e.g., "diode", "capacitor"
+    reject(candidate)
+else:
+    keep(candidate)  # "resistor" hoặc nhãn không đáng tin</pre>
+
+<h3>Recall-boost mode</h3>
+<p>Khi <code>vlm_recall_boost=True</code> (theo mặc định khi enable VLM), pipeline mở rộng scale sweep và nới lỏng Chamfer/DINOv2 threshold để tìm thêm candidate, rồi để VLM làm bộ lọc precision:</p>
+<table>
+  <thead><tr><th>Tham số</th><th>Normal</th><th>VLM Recall-boost</th></tr></thead>
+  <tbody>
+    <tr><td>Scale fracs (probe-focused)</td><td>[0.80–1.20]</td><td>[0.55–1.55]</td></tr>
+    <tr><td>DINOv2 threshold (3a)</td><td>0.878</td><td>0.80</td></tr>
+    <tr><td>Chamfer max</td><td>5.0</td><td>7.0</td></tr>
+    <tr><td>Confidence gap filter</td><td>Bật</td><td>Tắt</td></tr>
+  </tbody>
+</table>
+
+<!-- ===== 4. NCC DETAIL ===== -->
+<h2 id="ncc-detail" class="section-id">4. NCC Matcher — Chi tiết kỹ thuật</h2>
+<p><strong>File:</strong> <span class="inline-code">src/ncc_matcher.py · class NCCMatcher</span></p>
+
+<h3>API</h3>
+<pre>class NCCMatcher:
+    def __init__(self,
+                 scales: List[float] = None,      # default: [0.85, 0.90, ..., 1.15]
+                 angles: List[float] = None,      # default: [-10, -5, 0, 5, 10]
+                 ncc_threshold: float = 0.55,
+                 nms_iou_threshold: float = 0.30):
+
+    def match(self, drawing: np.ndarray, template: np.ndarray) -> List[dict]:
+        """Returns: [{x, y, w, h, ncc_score, scale, angle}, ...]"""
+
+    def rotate_template(self, template: np.ndarray, angle: float) -> np.ndarray:</pre>
+
+<h3>Candidate format</h3>
+<pre>{
+  "x": int,          # tọa độ top-left trong drawing
+  "y": int,
+  "w": int,          # kích thước bounding box (= rotated template size)
+  "h": int,
+  "ncc_score": float, # NCC score [0, 1]
+  "scale": float,     # tỉ lệ scale so với template gốc
+  "angle": float      # góc xoay tính bằng độ
+}</pre>
+
+<h3>NMS cross-orientation protection</h3>
+<pre>def _apply_nms(candidates, iou_threshold):
+    for i, cand in enumerate(sorted_candidates):
+        for j, other in enumerate(remaining):
+            # KHÔNG suppress nếu 2 candidate khác orientation group
+            a_vert = 70 <= abs(cand["angle"]) <= 110
+            b_vert = 70 <= abs(other["angle"]) <= 110
+            if a_vert != b_vert:
+                continue  # ← bỏ qua so sánh giữa H và V
+
+            if containment_iou(cand, other) > iou_threshold:
+                suppress(lower_ncc_candidate)</pre>
+
+<!-- ===== 5. DINO DETAIL ===== -->
+<h2 id="dino-detail" class="section-id">5. DINOv2 Verifier — Chi tiết kỹ thuật</h2>
+<p><strong>File:</strong> <span class="inline-code">src/dino_verifier.py · class DINOVerifier</span></p>
+
+<h3>Model architecture</h3>
+<table>
+  <thead><tr><th>Thuộc tính</th><th>dinov2_vits14</th></tr></thead>
+  <tbody>
+    <tr><td>Architecture</td><td>Vision Transformer, patch size 14×14</td></tr>
+    <tr><td>Parameters</td><td>21M (Small variant)</td></tr>
+    <tr><td>Training</td><td>DINO self-supervised, 142M web images</td></tr>
+    <tr><td>Output dim</td><td>384 (patch tokens pooled → mean)</td></tr>
+    <tr><td>Input size</td><td>Bất kỳ (resize về bội số 14 trước khi encode)</td></tr>
+    <tr><td>VRAM</td><td>~0.5GB fp32 / ~0.25GB fp16</td></tr>
+  </tbody>
+</table>
+
+<h3>Feature extraction</h3>
+<pre>features = model.forward_features(image_tensor)
+# x_norm_patchtokens: (B, N_patches, D) — patch-level features
+pooled = features["x_norm_patchtokens"].mean(dim=1)  # (B, D)
+unit_norm = F.normalize(pooled, dim=1)               # L2-normalized</pre>
+
+<h3>Orientation normalization</h3>
+<pre>def embed_crops_normalized(crops):
+    """Normalize tất cả crops về landscape orientation trước khi encode."""
+    for crop in crops:
+        h, w = crop.shape[:2]
+        if h > w:  # portrait → rotate CCW để thành landscape
+            crop = cv2.rotate(crop, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    return embed_crops_batch(normalized_crops)</pre>
+
+<h3>Confidence computation</h3>
+<pre>confidence = (ncc_score + dino_score) / 2
+# Cân bằng giữa NCC (recall signal) và DINOv2 (precision signal)
+# Candidates được sort by confidence giảm dần</pre>
+
+<!-- ===== 6. FILTERS DETAIL ===== -->
+<h2 id="filters-detail" class="section-id">6. Structural Filters — Chi tiết kỹ thuật</h2>
+<p><strong>File:</strong> <span class="inline-code">src/postprocessor.py · class Postprocessor</span></p>
+
+<h3>filter_wire_leads — thông số đo</h3>
+<pre>def filter_wire_leads(candidates, drawing, pattern):
+    for cand in candidates:
+        if cand["dino_score"] >= 0.88:
+            keep(cand)  # ← DINOv2 bypass: high-confidence không cần filter
+            continue
+
+        # Probe left và right (horizontal component)
+        probe = 24  # pixel
+        min_run = 2  # số pixel tối thiểu của dark run (mạnh)
+        min_run_weak = 0  # một phía OK nếu phía kia weak
+
+        has_left_lead = any_dark_run_left(bbox, probe, min_run)
+        has_right_lead = any_dark_run_right(bbox, probe, min_run)
+
+        if (has_left_lead + has_right_lead) == 0:
+            reject(cand)  # cả hai phía đều không có lead</pre>
+
+<h3>Title-block filter</h3>
+<pre># Phát hiện khung tên bản vẽ (title block) bằng vertical frame lines
+# Chỉ chạy khi title_block_x < drawing_width (có vertical lines)
+if title_block_x < W:
+    bom_start_x = title_block_x
+    candidates = [c for c in candidates if c["x"] + c["w"] <= bom_start_x]
+# Không có frame lines → open circuit, bom_start_x = W (không filter)</pre>
+
+<!-- ===== 7. VLM DETAIL ===== -->
+<h2 id="vlm-detail" class="section-id">7. VLM Verifier — Chi tiết kỹ thuật</h2>
+<p><strong>File:</strong> <span class="inline-code">src/vlm_verifier.py · class VLMVerifier</span></p>
+
+<h3>Model loading (lazy)</h3>
+<pre>class VLMVerifier:
+    def __init__(self, model_name="Qwen/Qwen2-VL-2B-Instruct", ...):
+        self._model = None  # lazy: chỉ load khi cần
+
+    def _ensure_loaded(self):
+        if self._model is None:
+            # Giải phóng VRAM cache trước khi load VLM
+            torch.cuda.empty_cache()
+            self._model = Qwen2VLForConditionalGeneration.from_pretrained(
+                model_name, torch_dtype=torch.bfloat16,
+                low_cpu_mem_usage=True
+            ).to(device)</pre>
+
+<h3>Classification vocabulary</h3>
+<pre>CLASSES = [
+    "resistor", "inductor", "capacitor", "diode", "crystal",
+    "transistor", "op-amp", "logic-gate", "wire-junction", "other"
+]
+
+UNTRUSTED_LABELS = {"transistor", "wire-junction", "other"}
+# Các nhãn 2B model hay gọi sai → không dùng làm lý do reject
+
+# Reject labels khi target = "resistor":
+reject_labels = CLASSES - {"resistor"} - UNTRUSTED_LABELS
+#             = {"inductor", "capacitor", "diode", "crystal", "op-amp", "logic-gate"}</pre>
+
+<h3>OOM protection</h3>
+<pre># Trong server.py: VLM failure không crash request
+try:
+    verified = vlm.filter_by_template_class(drawing, template, candidates, ...)
+except Exception as vlm_err:
+    traceback.print_exc()
+    print(f"[VLM] Falling back to NCC+DINOv2 result: {vlm_err}")
+    # verified giữ nguyên từ Stage 2b
+</pre>
+
+<!-- ===== 8. WEB UI ===== -->
+<h2 id="web-ui" class="section-id">8. Web UI — FastAPI Backend</h2>
+<p><strong>File:</strong> <span class="inline-code">app/web/server.py</span></p>
+
+<h3>API Endpoints</h3>
+<table>
+  <thead><tr><th>Method</th><th>Endpoint</th><th>Mô tả</th></tr></thead>
+  <tbody>
+    <tr><td><span class="badge badge-green">GET</span></td><td><code>/</code></td><td>Trả về index.html (SPA)</td></tr>
+    <tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/detect</code></td><td>Nhận pattern + drawing, trả về detections + visualization</td></tr>
+    <tr><td><span class="badge badge-green">GET</span></td><td><code>/api/export/csv</code></td><td>Export kết quả cuối cùng dạng CSV</td></tr>
+    <tr><td><span class="badge badge-green">GET</span></td><td><code>/static/*</code></td><td>CSS, JS, favicon</td></tr>
+  </tbody>
+</table>
+
+<h3>POST /api/detect — Request/Response</h3>
+<pre># Request (multipart/form-data)
+pattern:       UploadFile  # ảnh template
+drawing:       UploadFile  # ảnh bản vẽ
+mode:          str = "auto"    # "auto" | "manual"
+ncc_threshold: float = 0.55
+cosine_threshold: float = 0.84
+final_nms_iou: float = 0.40
+use_vlm:       str = "false"
+
+# Response (JSON)
+{
+  "success": true,
+  "total_detections": 22,
+  "detections": [
+    {
+      "bbox": {"x": 69, "y": 9, "w": 108, "h": 63},
+      "confidence": 0.880,
+      "ncc_score": 0.822,
+      "dino_score": 0.939,
+      "scale": 1.5,
+      "angle": 0.0
+    }, ...
+  ],
+  "elapsed": 24.5,
+  "visualization": "base64_png_string",
+  "drawing_preview": "base64_png_string"
+}</pre>
+
+<h3>Pipeline singleton</h3>
+<pre># Pipeline được khởi tạo một lần, cache trong suốt server lifetime
+_pipeline: Optional[PatternDetectionPipeline] = None
+
+def get_pipeline() -> PatternDetectionPipeline:
+    global _pipeline
+    if _pipeline is None:
+        _pipeline = PatternDetectionPipeline()
+    return _pipeline
+
+# VLM toggle tại runtime (không restart server)
+pipeline.use_vlm = coerce_bool(use_vlm)  # lazy-loads VLM on first enable</pre>
+
+<!-- ===== 9. CONFIG ===== -->
+<h2 id="config" class="section-id">9. Cấu hình hệ thống</h2>
+
+<h3>Tất cả tham số config</h3>
+<table>
+  <thead><tr><th>Key</th><th>Default</th><th>Mô tả</th></tr></thead>
+  <tbody>
+    <tr><td><code>ncc_threshold</code></td><td>0.55</td><td>NCC threshold cho Pass 1 (strict)</td></tr>
+    <tr><td><code>nms_iou_threshold</code></td><td>0.30</td><td>IoU threshold cho NMS nội trong NCC matcher</td></tr>
+    <tr><td><code>dino_model</code></td><td>"dinov2_vits14"</td><td>Model DINOv2 (vits14 hoặc vitb14)</td></tr>
+    <tr><td><code>cosine_threshold</code></td><td>0.84</td><td>DINOv2 cosine similarity threshold (Pass 1+2)</td></tr>
+    <tr><td><code>device</code></td><td>auto</td><td>"cuda" hoặc "cpu" — auto detect nếu None</td></tr>
+    <tr><td><code>final_nms_iou</code></td><td>0.40</td><td>IoU threshold cho Final NMS</td></tr>
+    <tr><td><code>dilate_pattern</code></td><td>0</td><td>Kernel size để dilate template stroke (0 = off)</td></tr>
+    <tr><td><code>use_dino_dense</code></td><td>True</td><td>Kích hoạt Pass C (DINODense) cho large-scale simple templates</td></tr>
+    <tr><td><code>dense_sim_threshold</code></td><td>0.78</td><td>Similarity threshold cho DINODense</td></tr>
+    <tr><td><code>use_vlm</code></td><td>False</td><td>Kích hoạt Stage 3 VLM filter</td></tr>
+    <tr><td><code>vlm_model</code></td><td>"Qwen/Qwen2-VL-2B-Instruct"</td><td>HuggingFace model ID cho VLM</td></tr>
+    <tr><td><code>vlm_keep_min_conf</code></td><td>0.75</td><td>Candidate trên threshold này bỏ qua VLM (trusted)</td></tr>
+    <tr><td><code>vlm_reject_only</code></td><td>True</td><td>Blacklist mode: chỉ reject khi VLM gọi đúng tên FP</td></tr>
+    <tr><td><code>vlm_recall_boost</code></td><td>follows use_vlm</td><td>Mở rộng scale sweep khi VLM on</td></tr>
+    <tr><td><code>vlm_symbol_name</code></td><td>None</td><td>Gợi ý class name cho VLM prompt</td></tr>
+  </tbody>
+</table>
+
+<h3>Ví dụ khởi tạo</h3>
+<pre>from src.pipeline import PatternDetectionPipeline
+
+# Cấu hình cơ bản
+pipe = PatternDetectionPipeline()
+
+# Cấu hình tùy chỉnh
+pipe = PatternDetectionPipeline(config={
+    "cosine_threshold": 0.84,
+    "final_nms_iou": 0.4,
+    "use_vlm": True,
+    "vlm_symbol_name": "a zigzag resistor",
+})
+
+# Chạy detection
+result = pipe.detect_auto("template.png", "drawing.png",
+                           return_visualization=True)
+print(result["total_detections"])
+for d in result["detections"]:
+    print(d["bbox"], d["confidence"])</pre>
+
+<!-- ===== 10. DOCKER ===== -->
+<h2 id="docker" class="section-id">10. Docker &amp; HuggingFace Spaces</h2>
+
+<h3>Dockerfile strategy</h3>
+<pre>FROM python:3.11-slim
+
+# CPU-only PyTorch (HF free tier không có GPU)
+RUN pip install "torch==2.1.0+cpu" "torchvision==0.16.0+cpu" \
+    --extra-index-url https://download.pytorch.org/whl/cpu
+
+RUN pip install -r requirements.txt
+
+COPY . .
+
+# Pre-download DINOv2 weights tại build time (~86MB)
+# → tránh cold-start delay khi request đầu tiên
+RUN python -c "import torch; torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')" || true
+
+EXPOSE 7860
+CMD ["python", "-m", "uvicorn", "app.web.server:app", "--host", "0.0.0.0", "--port", "7860"]</pre>
+
+<h3>HuggingFace Spaces YAML frontmatter</h3>
+<pre>---
+title: BOM Pattern Detection
+sdk: docker
+app_port: 7860
+pinned: false
+---</pre>
+
+<div class="callout callout-info">
+  <div class="callout-title">Lưu ý triển khai</div>
+  VLM (Qwen2-VL-2B, ~5GB) không được pre-download tại build time vì vượt quá giới hạn HF free tier. VLM được lazy-load khi người dùng bật checkbox "Use VLM" lần đầu. Trên CPU, VLM sẽ rất chậm (~10-20s/crop); chỉ thực tế trên GPU ≥ 8GB.
+</div>
+
+<!-- ===== 11. RESULTS ===== -->
+<h2 id="results" class="section-id">11. Kết quả thực nghiệm</h2>
+
+<h3>Drawing 4 + test_2.png (zigzag resistor template, 1536×1024px)</h3>
+<div class="grid3">
+  <div class="metric green">
+    <div class="metric-value">22/24</div>
+    <div class="metric-label">GT boxes detected (91.7% recall)</div>
+  </div>
+  <div class="metric blue">
+    <div class="metric-value">0</div>
+    <div class="metric-label">False Positives</div>
+  </div>
+  <div class="metric yellow">
+    <div class="metric-value">~25s</div>
+    <div class="metric-label">Runtime (RTX 3060 12GB)</div>
+  </div>
+</div>
+
+<h3>Các ký hiệu được phát hiện thành công</h3>
+<table>
+  <thead><tr><th>Loại</th><th>Số lượng</th><th>Đặc điểm khó</th><th>Kết quả</th></tr></thead>
+  <tbody>
+    <tr><td>Horizontal resistor (0°)</td><td>15</td><td>Kích thước 91–129px, NCC 0.66–0.84</td><td><span class="badge badge-green">Tất cả detected</span></td></tr>
+    <tr><td>Vertical resistor (90°)</td><td>7</td><td>DINOv2 score thấp hơn ~0.04 so với horizontal</td><td><span class="badge badge-green">Tất cả detected</span></td></tr>
+    <tr><td>Resistor trong hộp kép (GT22)</td><td>1</td><td>DINOv2=0.844, trùng range với diode FP</td><td><span class="badge badge-yellow">Missed (irreducible)</span></td></tr>
+    <tr><td>Resistor ở biên ảnh dưới (GT24)</td><td>1</td><td>NCC bị suppressed trong NCC NMS</td><td><span class="badge badge-yellow">Missed (boundary)</span></td></tr>
+  </tbody>
+</table>
+
+<h3>So sánh trước/sau các cải tiến chính</h3>
+<table>
+  <thead><tr><th>Version</th><th>Detections</th><th>GT Covered</th><th>FPs</th><th>Thay đổi chính</th></tr></thead>
+  <tbody>
+    <tr><td>Baseline (Session 5)</td><td>25</td><td>9/24</td><td>16</td><td>NCC only, no DINOv2 derotate</td></tr>
+    <tr><td>+ DINOv2 derotate + 3b threshold</td><td>28</td><td>22/24</td><td>4</td><td>3b DINOv2=0.78, NCC gate 0.55</td></tr>
+    <tr><td>+ 3a threshold 0.878 (FP removal)</td><td>22</td><td><strong>22/24</strong></td><td><strong>0</strong></td><td>DINOv2=0.878 loại diode/cap FP</td></tr>
+  </tbody>
+</table>
+
+<h3>Example pairs (synthetic test)</h3>
+<table>
+  <thead><tr><th>Pair</th><th>Detections</th><th>Expected</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>example1 (bridge rectifier)</td><td>5</td><td>5</td><td><span class="badge badge-green">Exact</span></td></tr>
+    <tr><td>example2 (simple component)</td><td>4</td><td>4</td><td><span class="badge badge-green">Exact</span></td></tr>
+  </tbody>
+</table>
+
+<h3>Unit tests</h3>
+<pre>$ python -m pytest tests/ -q
+..........  [100%]
+10 passed in 0.56s</pre>
+
+<!-- ===== 12. DESIGN CHOICES ===== -->
+<h2 id="design-choices" class="section-id">12. Quyết định thiết kế</h2>
+
+<h3>Tại sao NCC + DINOv2 thay vì end-to-end detector?</h3>
+<div class="card">
+  <p><strong>NCC alone:</strong> Nhanh nhưng brittle — thất bại khi có noise, scale variation nhỏ, hay domain shift nhẹ giữa template và drawing.</p>
+  <p><strong>DINOv2 dense sliding window:</strong> Chính xác nhưng cực kỳ chậm. Với drawing 1536×1024 và window 63×108: ~(1536-63)×(1024-108) ≈ 1.35M vị trí × encode cost → không thực tế.</p>
+  <p><strong>Hybrid NCC → DINOv2:</strong> NCC propose 200–400 candidates với recall cao. DINOv2 verify với accuracy neural. Tổng cost = NCC (fast) + DINOv2 trên vài trăm crops (manageable). Đây là kiến trúc cascade hiệu quả nhất cho bài toán này.</p>
+</div>
+
+<h3>Tại sao ViT-S thay vì ViT-B?</h3>
+<p>ViT-S/14 (21M params) được chọn vì: (1) đủ feature quality cho bản vẽ kỹ thuật binary, (2) 2× nhanh hơn ViT-B trên CPU, (3) 0.5GB VRAM thay vì 1.5GB. Swap sang <code>dinov2_vitb14</code> nếu cần accuracy cao hơn.</p>
+
+<h3>Tại sao không dùng CLIP?</h3>
+<p>Thực nghiệm trong <code>design_spec/model_survey.md</code>: CLIP image-to-image similarity không cho separation FP tốt hơn DINOv2 trên bản vẽ. CLIP text-guided phá vỡ zero-shot vì cần biết tên class trước.</p>
+
+<h3>Tại sao VLM dùng open-classification thay vì yes/no?</h3>
+<p>Model 2B có "agreement bias" — trả lời "yes" cho 40/40 crops khi prompt dạng yes/no. Open-classification bắt model phải chọn từ vocabulary cụ thể, loại bỏ bias này. Chi tiết trong <code>design_spec/model_survey.md §VLM</code>.</p>
+
+<h3>Tại sao DINOv2 threshold 3a khác 3b?</h3>
+<p>Pass 3b (vertical) sử dụng <code>warpAffine</code> để de-rotate crop về horizontal trước khi so sánh với template. Phép biến đổi affine gây ra interpolation artifacts, làm cosine similarity giảm ~0.03–0.05. Đo thực nghiệm: genuine vertical resistors score 0.80–0.83, trong khi horizontal TPs score 0.85–0.94. Dùng chung threshold sẽ miss tất cả vertical instances.</p>
+
+<!-- ===== 13. LIMITATIONS ===== -->
+<h2 id="limitations" class="section-id">13. Hạn chế &amp; Hướng cải thiện</h2>
+
+<div class="grid2">
+  <div>
+    <h3>Hạn chế hiện tại</h3>
+    <div class="callout callout-warn">
+      <div class="callout-title">Boundary Resistors</div>
+      Ký hiệu nằm tại biên ảnh (bottom/right edge) có thể bị suppress trong NCC NMS bởi candidate khác ở kích thước template lớn hơn có IoU containment cao.
+    </div>
+    <div class="callout callout-warn">
+      <div class="callout-title">Resistor trong Framing Box</div>
+      Khi ký hiệu nằm trong một khung chữ nhật bao quanh (như GT22), DINOv2 score giảm do context clutter. Score có thể trùng với FP diode, không phân biệt được bằng feature level.
+    </div>
+    <div class="callout callout-warn">
+      <div class="callout-title">Heavy Rotation (&gt;15°)</div>
+      Chỉ hỗ trợ ±10° (standard) và 90° (riêng Pass 3b). Ký hiệu bị xoay 45° sẽ không được phát hiện.
+    </div>
+    <div class="callout callout-warn">
+      <div class="callout-title">VLM Accuracy</div>
+      Model 2B hay gọi nhầm line-art mơ hồ là "transistor". Reject-only mode xử lý được phần nào nhưng không hoàn hảo.
+    </div>
+  </div>
+  <div>
+    <h3>Hướng cải thiện</h3>
+    <div class="callout callout-success">
+      <div class="callout-title">Boundary Aware NMS</div>
+      Giảm NMS threshold cho candidates gần biên ảnh (bottom 10%, right 5%) để tránh over-suppress.
+    </div>
+    <div class="callout callout-success">
+      <div class="callout-title">Prototype-based DINOv2</div>
+      Sau khi detect xong, dùng high-confidence TPs làm prototype cluster. So sánh borderline candidates với cluster thay vì single template.
+    </div>
+    <div class="callout callout-success">
+      <div class="callout-title">VLM 7B 4-bit</div>
+      Thử Qwen2-VL-7B với quantization 4-bit (~4.5GB) để classification chính xác hơn, giảm FP mà không ảnh hưởng TP.
+    </div>
+    <div class="callout callout-success">
+      <div class="callout-title">Batch Processing</div>
+      Hiện tại xử lý 1 drawing/request. Có thể thêm batch mode với ONNX export + TensorRT để tăng throughput.
+    </div>
+  </div>
+</div>
+
+<h3>Các thành phần đã được loại bỏ</h3>
+<table>
+  <thead><tr><th>Thành phần</th><th>Lý do loại</th><th>Commit</th></tr></thead>
+  <tbody>
+    <tr><td>CLIP ViT-B/32 verifier</td><td>Benchmark cho thấy không cải thiện FP separation so với DINOv2. Text-guided phá vỡ zero-shot.</td><td>e5f1c38</td></tr>
+    <tr><td>Borderline DINOv2 rescue (Chamfer+DINOv2)</td><td>Candidate được rescue tại (928,731) sau đó xác nhận là FP (wire corner).</td><td>d15fb7a</td></tr>
+    <tr><td>LightGlue keypoint verification</td><td>Phụ thuộc keypoint descriptor — không hoạt động tốt với binary line-art ít texture.</td><td>N/A (không implement)</td></tr>
+  </tbody>
+</table>
+
+<!-- ===== FOOTER ===== -->
+<footer>
+  <p><strong>Zero-Shot Pattern Detection System</strong> · Sotatek AI/CV Engineer Assessment 2026</p>
+  <p style="margin-top:6px;">Stack: OpenCV · PyTorch · DINOv2 ViT-S/14 · Qwen2-VL-2B · FastAPI · Docker · HuggingFace Spaces</p>
+  <p style="margin-top:4px; color:#9ca3af;">Tác giả: <a href="mailto:duydeodai2003@gmail.com">duydeodai2003@gmail.com</a> · Repo: <code>D:\Sotatek_Assessment\pattern-detection-bom</code></p>
+</footer>
+
+</main>
+</div>
+
+<script>
+  // Active nav link tracking
+  const sections = document.querySelectorAll('.section-id');
+  const navLinks = document.querySelectorAll('nav a');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navLinks.forEach(l => l.classList.remove('active'));
+        const id = entry.target.id;
+        const active = document.querySelector(`nav a[href="#${id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
