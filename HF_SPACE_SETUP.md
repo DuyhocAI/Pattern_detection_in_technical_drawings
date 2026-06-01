@@ -9,10 +9,11 @@
 3. Fill in:
    ```
    Space name: Pattern_detection_in_technical_drawings
-   License: MIT
+   License: Other (or choose from dropdown)
    SDK: Docker ⭐ (IMPORTANT)
    Visibility: Public
    ```
+   **Note:** If "Other" selected, you can specify MIT in the Space description
 4. Click **"Create space"**
 
 ---
