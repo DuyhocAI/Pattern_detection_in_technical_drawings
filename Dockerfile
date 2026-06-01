@@ -10,15 +10,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install CPU-only PyTorch first (separate layer for caching)
+# Pin numpy<2 first to avoid NumPy 2.x incompatibility with PyTorch
+RUN pip install --no-cache-dir "numpy<2"
+
+# Install CPU-only PyTorch
 RUN pip install --no-cache-dir \
     torch==2.2.2 torchvision==0.17.2 \
     --index-url https://download.pytorch.org/whl/cpu
 
-# Copy requirements and install remaining deps
+# Copy requirements and install remaining deps (skip torch/torchvision/numpy)
 COPY requirements.txt .
-RUN grep -v "^torch\|^torchvision" requirements.txt > requirements_no_torch.txt && \
-    pip install --no-cache-dir -r requirements_no_torch.txt
+RUN grep -v "^torch\|^torchvision\|^numpy" requirements.txt > requirements_filtered.txt && \
+    pip install --no-cache-dir -r requirements_filtered.txt
 
 # Copy project source
 COPY . .
