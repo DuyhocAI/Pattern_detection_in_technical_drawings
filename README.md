@@ -27,7 +27,7 @@ Find every occurrence of a given component symbol inside large engineering BOM d
 
 ---
 
-## 📊 Results (Test Drawing 4 + Zigzag Resistor Template)
+## Results (Test Drawing 4 + Zigzag Resistor Template)
 
 | Metric | Value |
 |--------|-------|
@@ -39,7 +39,7 @@ Find every occurrence of a given component symbol inside large engineering BOM d
 
 ---
 
-## 🏗️ Pipeline Architecture
+## Pipeline Architecture
 
 ```
 ┌──────────────┐         ┌──────────────┐
@@ -101,7 +101,7 @@ Find every occurrence of a given component symbol inside large engineering BOM d
 
 ---
 
-## 📦 Installation
+## Installation
 
 ### Requirements
 - Python 3.11+
@@ -129,7 +129,7 @@ pip install -r requirements.txt
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Python API
 
@@ -181,7 +181,7 @@ docker run -p 7860:7860 bom-detector
 
 ---
 
-## 📋 Output Format
+## Output Format
 
 ```json
 {
@@ -209,7 +209,7 @@ docker run -p 7860:7860 bom-detector
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 ### Pipeline Parameters
 
@@ -241,7 +241,7 @@ result = pipe.detect_auto("pattern.png", "drawing.png")
 
 ---
 
-## 🔍 Design Choices
+## Design Choices
 
 ### Why NCC + DINOv2?
 
@@ -263,7 +263,7 @@ result = pipe.detect_auto("pattern.png", "drawing.png")
 
 ---
 
-## 📚 Stages in Detail
+## Stages in Detail
 
 ### Stage 1: NCC Multi-scale Matching
 - Scales: 0.70×–1.80× (adaptive per template)
@@ -293,7 +293,7 @@ result = pipe.detect_auto("pattern.png", "drawing.png")
 
 ---
 
-## 📖 Documentation
+## Documentation
 
 **For detailed system specification, see:**
 - [System Specification (HTML)](design_spec/system_spec.html) — complete architecture, algorithms, experimental results
@@ -303,7 +303,7 @@ result = pipe.detect_auto("pattern.png", "drawing.png")
 
 ---
 
-## 🧪 Testing
+## Testing
 
 ```bash
 # Run all tests
@@ -325,7 +325,7 @@ pytest tests/ --cov=src --cov-report=html
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 pattern-detection-bom/
@@ -362,7 +362,7 @@ pattern-detection-bom/
 
 ---
 
-## 🚦 Performance
+## Performance
 
 | Metric | Value |
 |--------|-------|
@@ -375,7 +375,7 @@ pattern-detection-bom/
 
 ---
 
-## ⚠️ Known Limitations
+## Known Limitations
 
 1. **Boundary resistors** — Symbols at image edges may be suppressed by NMS
 2. **Resistor in framing box** — When a symbol sits inside a dense bounding frame, DINOv2 score collides with FP diodes (irreducible without VLM)
@@ -385,7 +385,7 @@ pattern-detection-bom/
 
 ---
 
-## 🔧 Development
+## Development
 
 ### Running with custom config
 
@@ -405,13 +405,13 @@ Edit `src/postprocessor.py`, add method to `Postprocessor` class following the p
 
 ---
 
-## 📝 License
+## License
 
 MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
-## 👤 Author
+## Author
 
 **Bảo Duy** — [duydeodai2003@gmail.com](mailto:duydeodai2003@gmail.com)
 
@@ -424,7 +424,7 @@ See [AUTHORS.md](AUTHORS.md) for full credits and framework acknowledgments.
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **DINOv2** — Facebook AI ([Oquab et al., 2023](https://arxiv.org/abs/2304.07193))
 - **Qwen2-VL** — Alibaba Qwen Team
