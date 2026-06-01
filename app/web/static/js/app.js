@@ -356,8 +356,6 @@ function switchPage(pageName) {
     if (uploadSection) uploadSection.style.display = 'block';
     if (aboutPage) aboutPage.style.display = 'none';
     if (topbar) topbar.style.display = 'flex';
-    if (statsRow && statsRow.style.display !== 'none') statsRow.style.display = 'grid';
-    if (resultsSection && resultsSection.style.display !== 'none') resultsSection.style.display = 'block';
   } else if (pageName === 'about') {
     if (uploadSection) uploadSection.style.display = 'none';
     if (statsRow) statsRow.style.display = 'none';
