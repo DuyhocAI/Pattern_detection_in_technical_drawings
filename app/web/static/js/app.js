@@ -336,6 +336,32 @@ document.addEventListener('click', async (e) => {
   }
 });
 
+// ---- Page navigation ----
+const uploadSection = document.querySelector('.upload-section');
+const aboutPage = document.getElementById('aboutPage');
+const navItems = document.querySelectorAll('.nav-item');
+
+function switchPage(pageName) {
+  navItems.forEach(item => item.classList.remove('active'));
+  document.querySelector(`[data-page="${pageName}"]`).classList.add('active');
+
+  if (pageName === 'detect') {
+    uploadSection.style.display = 'block';
+    aboutPage.style.display = 'none';
+  } else if (pageName === 'about') {
+    uploadSection.style.display = 'none';
+    aboutPage.style.display = 'block';
+  }
+}
+
+navItems.forEach(item => {
+  item.addEventListener('click', (e) => {
+    e.preventDefault();
+    const page = item.dataset.page;
+    switchPage(page);
+  });
+});
+
 // ---- Initial status check ----
 (async () => {
   try {

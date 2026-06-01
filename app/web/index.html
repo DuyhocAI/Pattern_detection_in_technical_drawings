@@ -238,6 +238,147 @@
         <div class="loading-sub" id="loadingStage">Initializing pipeline…</div>
       </div>
     </div>
+
+    <!-- ===== ABOUT PAGE ===== -->
+    <section class="about-page" id="aboutPage" style="display:none;">
+      <div class="about-hero">
+        <div class="about-hero-icon">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </div>
+        <h2 class="about-title">BOM Pattern Detection</h2>
+        <p class="about-subtitle">Zero-shot symbol detection for engineering drawings · No training data required</p>
+        <div class="about-badges">
+          <span class="about-badge">NCC</span>
+          <span class="about-badge">DINOv2 ViT-S/14</span>
+          <span class="about-badge">Qwen2-VL-2B</span>
+          <span class="about-badge">Zero-shot</span>
+        </div>
+      </div>
+
+      <div class="about-grid">
+        <!-- Pipeline card -->
+        <div class="about-card about-card-wide">
+          <div class="about-card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Pipeline Architecture
+          </div>
+          <div class="pipeline-steps">
+            <div class="pipe-step">
+              <div class="pipe-num" style="background:#6366f1;">0</div>
+              <div class="pipe-body">
+                <div class="pipe-name">Preprocess</div>
+                <div class="pipe-desc">Adaptive binarize · Denoise</div>
+              </div>
+              <div class="pipe-time">&lt;0.5s</div>
+            </div>
+            <div class="pipe-arrow">→</div>
+            <div class="pipe-step">
+              <div class="pipe-num" style="background:#2563eb;">1</div>
+              <div class="pipe-body">
+                <div class="pipe-name">NCC Matching</div>
+                <div class="pipe-desc">Multi-scale · Multi-angle · NMS</div>
+              </div>
+              <div class="pipe-time">15–60s CPU</div>
+            </div>
+            <div class="pipe-arrow">→</div>
+            <div class="pipe-step">
+              <div class="pipe-num" style="background:#0e9f6e;">2</div>
+              <div class="pipe-body">
+                <div class="pipe-name">DINOv2 Verify</div>
+                <div class="pipe-desc">Cosine similarity · Derotate</div>
+              </div>
+              <div class="pipe-time">2–10s GPU</div>
+            </div>
+            <div class="pipe-arrow">→</div>
+            <div class="pipe-step">
+              <div class="pipe-num" style="background:#0891b2;">2b</div>
+              <div class="pipe-body">
+                <div class="pipe-name">Struct Filters</div>
+                <div class="pipe-desc">Chamfer · NMS · Gap filter</div>
+              </div>
+              <div class="pipe-time">&lt;1s</div>
+            </div>
+            <div class="pipe-arrow" style="opacity:.5;">→</div>
+            <div class="pipe-step" style="opacity:.7; border-style:dashed;">
+              <div class="pipe-num" style="background:#d97706;">3</div>
+              <div class="pipe-body">
+                <div class="pipe-name">VLM Filter</div>
+                <div class="pipe-desc">Qwen2-VL · Optional</div>
+              </div>
+              <div class="pipe-time">~0.4s/crop</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Key features -->
+        <div class="about-card">
+          <div class="about-card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Key Features
+          </div>
+          <ul class="about-list">
+            <li>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              Fully zero-shot — no fine-tuning or labeled data
+            </li>
+            <li>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              Multi-scale (0.7×–1.8×) &amp; multi-angle (±10°, 90°)
+            </li>
+            <li>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              Handles simple and complex symbol templates
+            </li>
+            <li>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              Optional VLM stage for hard FP rejection
+            </li>
+            <li>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              CPU + GPU support · Docker ready
+            </li>
+          </ul>
+        </div>
+
+        <!-- Tech stack -->
+        <div class="about-card">
+          <div class="about-card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            Tech Stack
+          </div>
+          <div class="tech-table">
+            <div class="tech-row"><span class="tech-layer">Stage 1</span><span class="tech-val">OpenCV NCC · <code>TM_CCOEFF_NORMED</code></span></div>
+            <div class="tech-row"><span class="tech-layer">Stage 2</span><span class="tech-val">DINOv2 ViT-S/14 · PyTorch</span></div>
+            <div class="tech-row"><span class="tech-layer">Stage 3</span><span class="tech-val">Qwen2-VL-2B · HuggingFace</span></div>
+            <div class="tech-row"><span class="tech-layer">Backend</span><span class="tech-val">FastAPI · Python 3.11</span></div>
+            <div class="tech-row"><span class="tech-layer">Deploy</span><span class="tech-val">Docker · HuggingFace Spaces</span></div>
+          </div>
+        </div>
+
+        <!-- Spec link card -->
+        <div class="about-card about-spec-card">
+          <div class="about-card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            System Specification
+          </div>
+          <p class="about-spec-desc">Đặc tả kỹ thuật chi tiết toàn bộ hệ thống: kiến trúc pipeline, thuật toán từng stage, các quyết định thiết kế, kết quả thực nghiệm và hướng cải thiện.</p>
+          <div class="about-spec-meta">
+            <span>13 mục · Pipeline · Filters · VLM · Config · Results</span>
+          </div>
+          <a href="/spec" target="_blank" class="spec-link-btn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            Mở đặc tả hệ thống
+          </a>
+        </div>
+      </div>
+
+      <div class="about-footer">
+        Sotatek AI/CV Engineer Assessment · 2026 ·
+        <a href="mailto:duydeodai2003@gmail.com">duydeodai2003@gmail.com</a>
+      </div>
+    </section>
   </main>
 
   <script src="/static/js/app.js"></script>

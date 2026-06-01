@@ -79,6 +79,12 @@ async def index():
     return html_path.read_text(encoding="utf-8")
 
 
+@app.get("/spec", response_class=HTMLResponse)
+async def system_spec():
+    spec_path = ROOT / "design_spec" / "system_spec.html"
+    return spec_path.read_text(encoding="utf-8")
+
+
 def _coerce_bool(val) -> bool:
     """Form values arrive as strings; coerce 'true'/'1'/'on' to bool."""
     if isinstance(val, bool):
