@@ -337,45 +337,50 @@ document.addEventListener('click', async (e) => {
 });
 
 // ---- Page navigation ----
-const navItems = document.querySelectorAll('.nav-item');
-console.log('[App] Found nav items:', navItems.length);
+document.addEventListener('DOMContentLoaded', () => {
+  const navItems = document.querySelectorAll('.nav-item');
+  console.log('[App] Found nav items:', navItems.length);
 
-function switchPage(pageName) {
-  console.log('[App] Switching to page:', pageName);
-  const uploadSection = document.querySelector('.upload-section');
-  const aboutPage = document.getElementById('aboutPage');
-  const topbar = document.querySelector('.topbar');
-  const statsRow = document.getElementById('statsRow');
-  const resultsSection = document.getElementById('resultsSection');
+  function switchPage(pageName) {
+    console.log('[App] Switching to page:', pageName);
 
-  navItems.forEach(item => item.classList.remove('active'));
-  const activeNav = document.querySelector(`[data-page="${pageName}"]`);
-  if (activeNav) activeNav.classList.add('active');
+    const uploadSection = document.querySelector('.upload-section');
+    const aboutPage = document.getElementById('aboutPage');
+    const topbar = document.querySelector('.topbar');
+    const statsRow = document.getElementById('statsRow');
+    const resultsSection = document.getElementById('resultsSection');
 
-  if (pageName === 'detect') {
-    if (uploadSection) uploadSection.style.display = 'block';
-    if (aboutPage) aboutPage.style.display = 'none';
-    if (topbar) topbar.style.display = 'flex';
-  } else if (pageName === 'about') {
+    // Update active nav
+    navItems.forEach(item => item.classList.remove('active'));
+    document.querySelector(`[data-page="${pageName}"]`).classList.add('active');
+
+    // Hide all pages first
     if (uploadSection) uploadSection.style.display = 'none';
+    if (aboutPage) aboutPage.style.display = 'none';
+    if (topbar) topbar.style.display = 'none';
     if (statsRow) statsRow.style.display = 'none';
     if (resultsSection) resultsSection.style.display = 'none';
-    if (aboutPage) aboutPage.style.display = 'block';
-    if (topbar) topbar.style.display = 'none';
-    // Scroll to top
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-}
 
-navItems.forEach(item => {
-  item.addEventListener('click', (e) => {
-    e.preventDefault();
-    const page = item.dataset.page;
-    console.log('[App] Nav clicked, page:', page);
-    switchPage(page);
+    // Show selected page
+    if (pageName === 'detect') {
+      if (uploadSection) uploadSection.style.display = 'block';
+      if (topbar) topbar.style.display = 'flex';
+    } else if (pageName === 'about') {
+      if (aboutPage) aboutPage.style.display = 'block';
+    }
+  }
+
+  navItems.forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.preventDefault();
+      const page = item.dataset.page;
+      console.log('[App] Nav item clicked:', page);
+      switchPage(page);
+    });
   });
+
+  console.log('[App] Navigation initialized');
 });
-console.log('[App] Page navigation initialized');
 
 // ---- Initial status check ----
 (async () => {
