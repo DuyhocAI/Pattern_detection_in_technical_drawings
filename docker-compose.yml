@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  bom-detector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bom-detector:latest
+    container_name: bom-detector
+    ports:
+      - "8000:7860"
+    environment:
+      - KMP_DUPLICATE_LIB_OK=TRUE
+      - PORT=7860
+    volumes:
+      # Optional: mount local directories for development
+      - ./app:/app/app
+      - ./src:/app/src
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
