@@ -10,9 +10,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Pin numpy<2 first to avoid NumPy 2.x incompatibility with PyTorch
-RUN pip install --no-cache-dir "numpy<2"
-
 # Install CPU-only PyTorch
 RUN pip install --no-cache-dir \
     torch==2.2.2 torchvision==0.17.2 \
@@ -22,6 +19,9 @@ RUN pip install --no-cache-dir \
 COPY requirements.txt .
 RUN grep -v "^torch\|^torchvision\|^numpy" requirements.txt > requirements_filtered.txt && \
     pip install --no-cache-dir -r requirements_filtered.txt
+
+# Force pin numpy<2 LAST so nothing can upgrade it
+RUN pip install --no-cache-dir --force-reinstall "numpy>=1.24,<2.0"
 
 # Copy project source
 COPY . .
