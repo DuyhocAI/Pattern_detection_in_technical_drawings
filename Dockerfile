@@ -6,24 +6,23 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libgl1-mesa-glx \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements early for layer caching
-COPY requirements.txt .
-
-# Install CPU-only PyTorch (much lighter than CUDA build; HF free tier is CPU-only)
+# Install CPU-only PyTorch first (separate layer for caching)
 RUN pip install --no-cache-dir \
-    "torch==2.1.0+cpu" "torchvision==0.16.0+cpu" \
-    --extra-index-url https://download.pytorch.org/whl/cpu
+    torch==2.2.2 torchvision==0.17.2 \
+    --index-url https://download.pytorch.org/whl/cpu
 
-# Install remaining dependencies (FastAPI, OpenCV, Pillow, etc.)
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy requirements and install remaining deps
+COPY requirements.txt .
+RUN grep -v "^torch\|^torchvision" requirements.txt > requirements_no_torch.txt && \
+    pip install --no-cache-dir -r requirements_no_torch.txt
 
 # Copy project source
 COPY . .
 
-# Pre-download DINOv2 ViT-S/14 weights at build time (~86 MB) to avoid
-# cold-start delay on first request in HuggingFace Spaces.
+# Pre-download DINOv2 ViT-S/14 weights at build time (~86 MB)
 RUN python -c "import torch; torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')" || true
 
 # HuggingFace Spaces requires port 7860
