@@ -414,9 +414,14 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ## 👤 Author
 
-**Sotatek AI/CV Assessment — Duy Hoang**  
-Assessment Duration: 96 hours  
-Submission: June 1, 2026
+**Duy Hoang** — [duydeodai2003@gmail.com](mailto:duydeodai2003@gmail.com)
+
+- **GitHub:** [@DuyhocAI](https://github.com/DuyhocAI)
+- **Project:** Sotatek AI/Computer Vision Engineer Assessment
+- **Duration:** 96 hours
+- **Submission:** June 1, 2026
+
+See [AUTHORS.md](AUTHORS.md) for full credits and framework acknowledgments.
 
 ---
 
