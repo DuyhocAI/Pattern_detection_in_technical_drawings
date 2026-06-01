@@ -47,6 +47,45 @@ const detectionsList   = document.getElementById('detectionsList');
 const detectionCount   = document.getElementById('detectionCount');
 const downloadBtn      = document.getElementById('downloadBtn');
 
+// ---- PAGE NAVIGATION (init early) ----
+const navItems = document.querySelectorAll('.nav-item');
+console.log('[NAV] Found nav items:', navItems.length);
+
+function switchPage(pageName) {
+  console.log('[NAV] Switch to:', pageName);
+  const uploadSection = document.querySelector('.upload-section');
+  const aboutPage = document.getElementById('aboutPage');
+  const topbar = document.querySelector('.topbar');
+  const statsRow = document.getElementById('statsRow');
+  const resultsSection = document.getElementById('resultsSection');
+
+  navItems.forEach(item => item.classList.remove('active'));
+  const activeItem = document.querySelector(`[data-page="${pageName}"]`);
+  if (activeItem) activeItem.classList.add('active');
+
+  if (uploadSection) uploadSection.style.display = 'none';
+  if (topbar) topbar.style.display = 'none';
+  if (statsRow) statsRow.style.display = 'none';
+  if (resultsSection) resultsSection.style.display = 'none';
+  if (aboutPage) aboutPage.style.display = 'none';
+
+  if (pageName === 'detect') {
+    if (uploadSection) uploadSection.style.display = 'block';
+    if (topbar) topbar.style.display = 'flex';
+  } else if (pageName === 'about') {
+    if (aboutPage) aboutPage.style.display = 'block';
+    window.scrollTo(0, 0);
+  }
+}
+
+navItems.forEach(item => {
+  item.addEventListener('click', function(e) {
+    e.preventDefault();
+    switchPage(this.dataset.page);
+  });
+});
+console.log('[NAV] Ready');
+
 // ---- Helpers ----
 function setStatus(state, text) {
   statusDot.className = 'status-dot ' + state;
@@ -335,52 +374,6 @@ document.addEventListener('click', async (e) => {
     URL.revokeObjectURL(a.href);
   }
 });
-
-// ---- Page navigation ----
-const navItems = document.querySelectorAll('.nav-item');
-
-function switchPage(pageName) {
-  console.log('[Page Navigation] Switching to:', pageName);
-
-  const uploadSection = document.querySelector('.upload-section');
-  const aboutPage = document.getElementById('aboutPage');
-  const topbar = document.querySelector('.topbar');
-  const statsRow = document.getElementById('statsRow');
-  const resultsSection = document.getElementById('resultsSection');
-
-  // Update active nav
-  navItems.forEach(item => item.classList.remove('active'));
-  const activeItem = document.querySelector(`[data-page="${pageName}"]`);
-  if (activeItem) activeItem.classList.add('active');
-
-  // Hide all sections
-  if (uploadSection) uploadSection.style.display = 'none';
-  if (topbar) topbar.style.display = 'none';
-  if (statsRow) statsRow.style.display = 'none';
-  if (resultsSection) resultsSection.style.display = 'none';
-  if (aboutPage) aboutPage.style.display = 'none';
-
-  // Show selected section
-  if (pageName === 'detect') {
-    if (uploadSection) uploadSection.style.display = 'block';
-    if (topbar) topbar.style.display = 'flex';
-  } else if (pageName === 'about') {
-    if (aboutPage) aboutPage.style.display = 'block';
-    window.scrollTo(0, 0);
-  }
-}
-
-// Attach click handlers
-navItems.forEach(item => {
-  item.addEventListener('click', function(e) {
-    e.preventDefault();
-    const page = this.dataset.page;
-    console.log('[Page Navigation] Clicked:', page);
-    switchPage(page);
-  });
-});
-
-console.log('[Page Navigation] Initialized with', navItems.length, 'nav items');
 
 // ---- Initial status check ----
 (async () => {
