@@ -1,6 +1,5 @@
 ---
 title: BOM Pattern Detection
-emoji: 🔍
 colorFrom: blue
 colorTo: green
 sdk: docker
