@@ -382,10 +382,18 @@ class PatternDetectionPipeline:
                     if self.vlm_recall_boost:
                         _micro_dino = 0.80
                     else:
-                        _micro_dino = min(0.88, max(0.82, _best_probe_ncc * 1.04))
-                    # No 3b bump for probe-focused path: 90°-rotated candidates have naturally
-                    # lower DINOv2 scores; an extra +0.01 would cut real vertical detections.
-                    _micro_dino_3b = _micro_dino
+                        # 0.84 is slightly below the formula-driven 0.855 to capture
+                        # horizontal TPs that score 0.83–0.85 due to context clutter
+                        # (resistor inside a surrounding box or near dense junctions).
+                        _micro_dino = 0.84
+                    # Pass 3b (vertical) needs a LOWER DINOv2 threshold than 3a:
+                    # 90°-rotated crops produce cosine similarities ~0.03–0.05 below
+                    # their horizontal equivalents after the derotate step (the crop
+                    # is not a perfect square when scaled, so warpAffine introduces
+                    # slight artefacts). Measured: genuine vertical resistors score
+                    # 0.80–0.83; detected horizontal TPs score 0.85–0.90. Using the
+                    # same threshold for both misses all vertical instances.
+                    _micro_dino_3b = max(_micro_dino - 0.07, 0.78)
                     # Tight NMS for probe-focused path: each candidate bbox is already at
                     # the right scale; union-expansion would create oversized merged boxes.
                     _complex_use_union = False
@@ -425,6 +433,18 @@ class PatternDetectionPipeline:
                 verified_3b = self.dino_verifier.verify_candidates(
                     drawing_proc, pattern_proc, cands_3b, derotate=True
                 ) if cands_3b else []
+                # Pass 3b NCC gate: genuine 90°-rotated resistors match the rotated
+                # template with NCC ≥ 0.73; structural look-alikes (capacitors,
+                # inductors, transistor leads) match at NCC 0.35–0.45. Applying a
+                # minimum NCC threshold here is far more discriminative than Chamfer
+                # or DINOv2 alone — both of which are fooled by similar-shaped FPs.
+                # Threshold 0.55 leaves a comfortable margin above FPs (max 0.45)
+                # and below genuine TPs (min 0.73).
+                _VERT_NCC_MIN = 0.55
+                before_3b_ncc = len(verified_3b)
+                verified_3b = [c for c in verified_3b if c.get("ncc_score", 0) >= _VERT_NCC_MIN]
+                if len(verified_3b) != before_3b_ncc:
+                    print(f"[Pipeline] Pass 3b NCC gate: {before_3b_ncc} -> {len(verified_3b)}")
                 print(f"[Pipeline] Pass 3b (micro 90°): {len(cands_3b)} cands -> {len(verified_3b)} verified")
 
                 all_complex = verified_filtered + verified_3a + verified_3b
