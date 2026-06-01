@@ -414,7 +414,7 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ## 👤 Author
 
-**Duy Hoang** — [duydeodai2003@gmail.com](mailto:duydeodai2003@gmail.com)
+**Bảo Duy** — [duydeodai2003@gmail.com](mailto:duydeodai2003@gmail.com)
 
 - **GitHub:** [@DuyhocAI](https://github.com/DuyhocAI)
 - **Project:** Sotatek AI/Computer Vision Engineer Assessment
